@@ -1,0 +1,87 @@
+# Comandos do projeto. Rode com: go tool task <nome>   (lista: go tool task --list)
+version: "3"
+
+dotenv: [".env"]
+
+vars:
+  MIGRATIONS_DIR: internal/db/migrations
+
+tasks:
+  dev:
+    desc: Abre o app em modo desenvolvimento (hot reload)
+    cmds:
+      - wails dev
+
+  build:
+    desc: Gera o executável em build/bin
+    cmds:
+      - wails build
+
+  setup:
+    desc: Instala as dependências do frontend
+    dir: frontend
+    cmds:
+      - npm install
+
+  test:
+    desc: Roda todos os testes (Go + frontend)
+    cmds:
+      - task: test:go
+      - task: test:front
+
+  test:go:
+    desc: Testes Go (os de integração exigem TEST_DATABASE_URL, senão são pulados)
+    cmds:
+      - go test ./... {{.CLI_ARGS}}
+
+  test:front:
+    desc: Testes do frontend (Vitest)
+    dir: frontend
+    cmds:
+      - npm run test
+
+  generate:
+    desc: Gera o código do sqlc e os bindings TS do Wails
+    cmds:
+      - go tool sqlc generate
+      - wails generate module
+
+  lint:
+    desc: Checagens estáticas (go vet, sqlc diff, tsc)
+    cmds:
+      - go vet ./...
+      - go tool sqlc diff
+      - cd frontend && npx tsc --noEmit
+
+  migrate:up:
+    desc: Aplica as migrations pendentes no DATABASE_URL
+    cmds:
+      - go tool goose -dir {{.MIGRATIONS_DIR}} postgres "$DATABASE_URL" up
+
+  migrate:down:
+    desc: Desfaz a última migration no DATABASE_URL
+    cmds:
+      - go tool goose -dir {{.MIGRATIONS_DIR}} postgres "$DATABASE_URL" down
+
+  migrate:status:
+    desc: Mostra o estado das migrations no DATABASE_URL
+    cmds:
+      - go tool goose -dir {{.MIGRATIONS_DIR}} postgres "$DATABASE_URL" status
+
+  migrate:new:
+    desc: "Cria uma migration SQL nova. Uso: go tool task migrate:new -- nome_da_migration"
+    preconditions:
+      - sh: '[ -n "{{.CLI_ARGS}}" ]'
+        msg: "Informe o nome: go tool task migrate:new -- nome_da_migration"
+    cmds:
+      - go tool goose -dir {{.MIGRATIONS_DIR}} -s create {{.CLI_ARGS}} sql
+
+  db:test:up:
+    desc: Sobe o Postgres de testes no Docker (porta 54329)
+    cmds:
+      - docker compose up -d --wait
+
+  db:test:down:
+    desc: Derruba o Postgres de testes (os dados são mantidos no volume)
+    cmds:
+      - docker compose down
