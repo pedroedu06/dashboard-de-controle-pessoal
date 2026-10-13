@@ -14,14 +14,14 @@ import (
 //go:embed migrations/*.sql
 var migrations embed.FS
 
-// Migrate aplica todas as migrations pendentes. É idempotente.
+// Migrate applies all pending migrations. It is idempotent.
 func Migrate(ctx context.Context, pool *pgxpool.Pool) error {
 	dir, err := fs.Sub(migrations, "migrations")
 	if err != nil {
 		return err
 	}
 
-	// Fechar este *sql.DB não fecha o pool.
+	// Closing this *sql.DB does not close the pool.
 	sqlDB := stdlib.OpenDBFromPool(pool)
 	defer sqlDB.Close()
 

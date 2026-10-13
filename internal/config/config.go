@@ -1,4 +1,4 @@
-// Package config carrega a configuração do app a partir do ambiente e de arquivos .env.
+// Package config loads the app configuration from the environment and .env files.
 package config
 
 import (
@@ -10,29 +10,26 @@ import (
 	"github.com/joho/godotenv"
 )
 
-// AppName é o nome da pasta de configuração dentro de os.UserConfigDir().
+// AppName is the config folder name inside os.UserConfigDir().
 const AppName = "dashboard"
 
-// ErrMissingDatabaseURL indica que DATABASE_URL não foi encontrada em nenhuma fonte.
-var ErrMissingDatabaseURL = errors.New("DATABASE_URL não definida: crie um arquivo .env (veja .env.example)")
+var ErrMissingDatabaseURL = errors.New("DATABASE_URL não definida: crie um arquivo .env (veja docs/ambiente.md)")
 
-// Config é a configuração do app.
 type Config struct {
 	DatabaseURL string
 }
 
-// Load lê a configuração, em ordem de prioridade:
-//  1. variáveis de ambiente já definidas;
-//  2. .env no diretório atual (desenvolvimento);
-//  3. .env em os.UserConfigDir()/dashboard (app compilado).
+// Load reads the configuration, in order of precedence:
+//  1. variables already set in the environment;
+//  2. .env in the working directory (development);
+//  3. .env in os.UserConfigDir()/dashboard (built app).
 //
-// Arquivos .env nunca sobrescrevem variáveis já definidas no ambiente.
+// .env files never override variables already set.
 func Load() (Config, error) {
 	return LoadFrom(candidateFiles()...)
 }
 
-// LoadFrom é como Load, mas recebe explicitamente os arquivos .env a tentar.
-// Arquivos inexistentes são ignorados.
+// LoadFrom is like Load but with explicit .env files. Missing files are skipped.
 func LoadFrom(files ...string) (Config, error) {
 	for _, f := range files {
 		if _, err := os.Stat(f); err != nil {

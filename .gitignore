@@ -2,10 +2,8 @@ build/bin
 node_modules
 frontend/dist
 
-# segredos e configurações locais
 .env
 *.local
 
-# saídas de teste
 coverage/
 *.out

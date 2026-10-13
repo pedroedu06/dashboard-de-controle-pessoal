@@ -3,7 +3,7 @@ import {beforeEach, describe, expect, it, vi} from 'vitest';
 import App from './App';
 import {DBStatus} from '../wailsjs/go/main/App';
 
-// Os bindings do Wails só existem dentro do app, então nos testes são mockados.
+// Wails bindings only exist inside the running app, so tests mock them.
 vi.mock('../wailsjs/go/main/App', () => ({
     DBStatus: vi.fn(),
 }));

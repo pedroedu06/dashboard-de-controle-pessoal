@@ -9,40 +9,36 @@ import (
 	"dashboard/internal/db"
 )
 
-// App struct
+// App holds the state shared by the Wails bindings.
 type App struct {
 	ctx   context.Context
 	pool  *pgxpool.Pool
 	dbErr error
 }
 
-// DBStatus é o estado da conexão com o banco, exposto ao frontend.
+// DBStatus is the database connection state sent to the frontend.
 type DBStatus struct {
 	Connected bool   `json:"connected"`
 	Error     string `json:"error,omitempty"`
 }
 
-// NewApp creates a new App application struct
 func NewApp() *App {
 	return &App{}
 }
 
-// startup is called when the app starts. The context is saved
-// so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
-	// Falhas de banco não derrubam o app: ficam visíveis via DBStatus.
+	// A database failure must not crash the app; it is reported via DBStatus.
 	a.pool, a.dbErr = connect(ctx)
 }
 
-// shutdown is called when the app is closing.
 func (a *App) shutdown(ctx context.Context) {
 	if a.pool != nil {
 		a.pool.Close()
 	}
 }
 
-// DBStatus informa se o app está conectado ao banco.
+// DBStatus reports whether the app can reach the database.
 func (a *App) DBStatus() DBStatus {
 	if a.dbErr != nil {
 		return DBStatus{Error: a.dbErr.Error()}

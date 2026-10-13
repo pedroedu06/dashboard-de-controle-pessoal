@@ -31,13 +31,7 @@ Não precisa instalar `sqlc`, `goose` nem `task`: o projeto roda tudo com `go to
 
 ### 2. Configure o `.env`
 
-```bash
-cp .env.example .env
-```
-
-Cole a string do Supabase em `DATABASE_URL`, trocando `[YOUR-PASSWORD]` pela sua senha. O `.env` está no `.gitignore` e nunca deve ser commitado.
-
-> O app procura o `.env` no diretório atual e, se não achar, em `%AppData%\dashboard\.env`, que é onde ele fica para o executável compilado.
+Crie um `.env` na raiz seguindo [docs/ambiente.md](docs/ambiente.md), que lista as variáveis, de onde tirar cada uma e os cuidados com a senha.
 
 ### 3. Instale as dependências e rode
 

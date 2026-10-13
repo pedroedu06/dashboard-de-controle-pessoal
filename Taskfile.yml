@@ -1,4 +1,4 @@
-# Comandos do projeto. Rode com: go tool task <nome>   (lista: go tool task --list)
+# Project commands. Run: go tool task <name>   (list: go tool task --list)
 version: "3"
 
 dotenv: [".env"]

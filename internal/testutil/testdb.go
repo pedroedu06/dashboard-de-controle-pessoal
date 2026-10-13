@@ -1,4 +1,4 @@
-// Package testutil reúne helpers para testes de integração com o Postgres.
+// Package testutil provides helpers for Postgres integration tests.
 package testutil
 
 import (
@@ -12,11 +12,9 @@ import (
 	"dashboard/internal/db/sqlc"
 )
 
-// EnvTestDatabaseURL é a variável com a URL do banco usado pelos testes.
 const EnvTestDatabaseURL = "TEST_DATABASE_URL"
 
-// DatabaseURL devolve a URL do banco de testes ou pula o teste se ela não
-// estiver definida (por exemplo, sem o Docker rodando).
+// DatabaseURL returns the test database URL, or skips the test when it is unset.
 func DatabaseURL(t testing.TB) string {
 	t.Helper()
 	url := os.Getenv(EnvTestDatabaseURL)
@@ -29,8 +27,7 @@ func DatabaseURL(t testing.TB) string {
 	return url
 }
 
-// Pool abre um pool no banco de testes com todas as migrations aplicadas.
-// O pool é fechado ao fim do teste.
+// Pool opens a migrated test database pool, closed when the test ends.
 func Pool(t testing.TB) *pgxpool.Pool {
 	t.Helper()
 	ctx := context.Background()
@@ -47,8 +44,8 @@ func Pool(t testing.TB) *pgxpool.Pool {
 	return pool
 }
 
-// Queries devolve as queries do sqlc dentro de uma transação que sofre
-// rollback ao fim do teste, isolando cada teste dos demais.
+// Queries returns sqlc queries bound to a transaction that is rolled back
+// when the test ends, so tests never see each other's data.
 func Queries(t testing.TB) *sqlc.Queries {
 	t.Helper()
 	ctx := context.Background()
@@ -57,7 +54,7 @@ func Queries(t testing.TB) *sqlc.Queries {
 	if err != nil {
 		t.Fatalf("iniciando transação: %v", err)
 	}
-	// Registrado depois do Close do pool, então roda antes dele (ordem LIFO).
+	// Cleanups run LIFO, so this rollback happens before the pool closes.
 	t.Cleanup(func() { _ = tx.Rollback(ctx) })
 
 	return sqlc.New(tx)

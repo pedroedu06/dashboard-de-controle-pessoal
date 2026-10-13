@@ -1,5 +1,5 @@
 -- +goose Up
--- Preferências do app (tema, módulo inicial etc.), em formato chave/valor.
+-- Key/value app preferences (theme, start module, etc.).
 CREATE TABLE settings (
     key        text        PRIMARY KEY,
     value      jsonb       NOT NULL,

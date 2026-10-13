@@ -1,4 +1,4 @@
-# Postgres usado SOMENTE pelos testes de integração (nunca aponte para o Supabase).
+# Postgres for integration tests ONLY. Never point it at Supabase.
 services:
   postgres-test:
     image: postgres:17-alpine

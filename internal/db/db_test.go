@@ -16,7 +16,7 @@ func TestOpen_InvalidURL(t *testing.T) {
 }
 
 func TestMigrate_IsIdempotent(t *testing.T) {
-	pool := testutil.Pool(t) // já aplica as migrations uma vez
+	pool := testutil.Pool(t) // runs the migrations once
 
 	if err := db.Migrate(context.Background(), pool); err != nil {
 		t.Fatalf("segunda execução de Migrate falhou: %v", err)
