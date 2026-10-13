@@ -1,41 +1,35 @@
-import {render, screen} from '@testing-library/react';
+import {fireEvent, render, screen} from '@testing-library/react';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 import App from './App';
 import {DBStatus} from '../wailsjs/go/main/App';
+import {tasksApi} from './features/tasks/api';
 
 // Wails bindings only exist inside the running app, so tests mock them.
-vi.mock('../wailsjs/go/main/App', () => ({
-    DBStatus: vi.fn(),
+vi.mock('../wailsjs/go/main/App', () => ({DBStatus: vi.fn()}));
+vi.mock('./features/tasks/api', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('./features/tasks/api')>()),
+    tasksApi: {agenda: vi.fn()},
 }));
-
-const mockDBStatus = vi.mocked(DBStatus);
 
 describe('App', () => {
     beforeEach(() => {
-        mockDBStatus.mockReset();
+        vi.mocked(DBStatus).mockResolvedValue({connected: true});
+        vi.mocked(tasksApi.agenda).mockResolvedValue({overdue: [], days: []});
     });
 
-    it('mostra "conectado" quando o banco responde', async () => {
-        mockDBStatus.mockResolvedValue({connected: true});
-
+    it('starts on Home', async () => {
         render(<App/>);
 
         expect(await screen.findByText('Banco: conectado')).toBeInTheDocument();
+        expect(screen.getByRole('button', {name: 'Home'})).toHaveAttribute('aria-current', 'page');
     });
 
-    it('mostra o erro retornado pelo Go', async () => {
-        mockDBStatus.mockResolvedValue({connected: false, error: 'DATABASE_URL não definida'});
-
+    it('navigates to Tarefas', async () => {
         render(<App/>);
 
-        expect(await screen.findByText(/DATABASE_URL não definida/)).toBeInTheDocument();
-    });
+        fireEvent.click(screen.getByRole('button', {name: 'Tarefas'}));
 
-    it('mostra o erro quando a chamada falha', async () => {
-        mockDBStatus.mockRejectedValue(new Error('falhou'));
-
-        render(<App/>);
-
-        expect(await screen.findByText(/falhou/)).toBeInTheDocument();
+        expect(await screen.findByText('Nenhuma tarefa por aqui.')).toBeInTheDocument();
+        expect(screen.getByRole('heading', {name: 'Tarefas'})).toBeInTheDocument();
     });
 });

@@ -7,6 +7,8 @@ import (
 
 	"dashboard/internal/config"
 	"dashboard/internal/db"
+	"dashboard/internal/db/sqlc"
+	"dashboard/internal/tasks"
 )
 
 // App holds the state shared by the Wails bindings.
@@ -14,6 +16,7 @@ type App struct {
 	ctx   context.Context
 	pool  *pgxpool.Pool
 	dbErr error
+	tasks *tasks.Service // nil while the database is unavailable
 }
 
 // DBStatus is the database connection state sent to the frontend.
@@ -30,6 +33,9 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	// A database failure must not crash the app; it is reported via DBStatus.
 	a.pool, a.dbErr = connect(ctx)
+	if a.dbErr == nil {
+		a.tasks = tasks.NewService(sqlc.New(a.pool))
+	}
 }
 
 func (a *App) shutdown(ctx context.Context) {

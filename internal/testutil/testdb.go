@@ -19,10 +19,10 @@ func DatabaseURL(t testing.TB) string {
 	t.Helper()
 	url := os.Getenv(EnvTestDatabaseURL)
 	if url == "" {
-		t.Skipf("%s não definida: suba o banco de testes com `go tool task db:test:up` e rode via `go tool task test`", EnvTestDatabaseURL)
+		t.Skipf("%s not set: start the test database with `go tool task db:test:up` and run `go tool task test`", EnvTestDatabaseURL)
 	}
 	if url == os.Getenv("DATABASE_URL") {
-		t.Fatalf("%s é igual a DATABASE_URL: os testes não podem rodar no banco real", EnvTestDatabaseURL)
+		t.Fatalf("%s equals DATABASE_URL: tests must never run against the real database", EnvTestDatabaseURL)
 	}
 	return url
 }
@@ -34,12 +34,12 @@ func Pool(t testing.TB) *pgxpool.Pool {
 
 	pool, err := db.Open(ctx, DatabaseURL(t))
 	if err != nil {
-		t.Fatalf("abrindo banco de testes: %v", err)
+		t.Fatalf("opening test database: %v", err)
 	}
 	t.Cleanup(pool.Close)
 
 	if err := db.Migrate(ctx, pool); err != nil {
-		t.Fatalf("aplicando migrations: %v", err)
+		t.Fatalf("migrate: %v", err)
 	}
 	return pool
 }
@@ -52,7 +52,7 @@ func Queries(t testing.TB) *sqlc.Queries {
 
 	tx, err := Pool(t).Begin(ctx)
 	if err != nil {
-		t.Fatalf("iniciando transação: %v", err)
+		t.Fatalf("begin transaction: %v", err)
 	}
 	// Cleanups run LIFO, so this rollback happens before the pool closes.
 	t.Cleanup(func() { _ = tx.Rollback(ctx) })

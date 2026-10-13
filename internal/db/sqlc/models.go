@@ -5,12 +5,68 @@
 package sqlc
 
 import (
+	"database/sql/driver"
 	"encoding/json"
+	"fmt"
 	"time"
 )
+
+type TaskUrgency string
+
+const (
+	TaskUrgencyLow    TaskUrgency = "low"
+	TaskUrgencyMedium TaskUrgency = "medium"
+	TaskUrgencyHigh   TaskUrgency = "high"
+)
+
+func (e *TaskUrgency) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = TaskUrgency(s)
+	case string:
+		*e = TaskUrgency(s)
+	default:
+		return fmt.Errorf("unsupported scan type for TaskUrgency: %T", src)
+	}
+	return nil
+}
+
+type NullTaskUrgency struct {
+	TaskUrgency TaskUrgency `json:"task_urgency"`
+	Valid       bool        `json:"valid"` // Valid is true if TaskUrgency is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullTaskUrgency) Scan(value interface{}) error {
+	if value == nil {
+		ns.TaskUrgency, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.TaskUrgency.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullTaskUrgency) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.TaskUrgency), nil
+}
 
 type Setting struct {
 	Key       string          `json:"key"`
 	Value     json.RawMessage `json:"value"`
 	UpdatedAt time.Time       `json:"updated_at"`
+}
+
+type Task struct {
+	ID        int64       `json:"id"`
+	Title     string      `json:"title"`
+	Urgency   TaskUrgency `json:"urgency"`
+	StartsAt  time.Time   `json:"starts_at"`
+	EndsAt    time.Time   `json:"ends_at"`
+	DoneAt    *time.Time  `json:"done_at"`
+	CreatedAt time.Time   `json:"created_at"`
+	UpdatedAt time.Time   `json:"updated_at"`
 }

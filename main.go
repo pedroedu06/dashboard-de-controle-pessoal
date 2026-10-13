@@ -13,6 +13,7 @@ var assets embed.FS
 
 func main() {
 	app := NewApp()
+	taskAPI := &TaskAPI{app: app}
 
 	err := wails.Run(&options.App{
 		Title:  "dashboard",
@@ -26,6 +27,7 @@ func main() {
 		OnShutdown:       app.shutdown,
 		Bind: []interface{}{
 			app,
+			taskAPI,
 		},
 	})
 

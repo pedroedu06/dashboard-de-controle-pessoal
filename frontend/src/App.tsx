@@ -1,30 +1,37 @@
-import {useEffect, useState} from 'react';
-import {DBStatus} from "../wailsjs/go/main/App";
-import {main} from "../wailsjs/go/models";
+import {useState} from 'react';
+import {Home} from './pages/Home';
+import {TasksPage} from './features/tasks/TasksPage';
 
-type Status = main.DBStatus | 'loading';
+const pages = {
+    home: {label: 'Home', component: Home},
+    tasks: {label: 'Tarefas', component: TasksPage},
+};
+
+type PageKey = keyof typeof pages;
 
 function App() {
-    const [status, setStatus] = useState<Status>('loading');
-
-    useEffect(() => {
-        DBStatus()
-            .then(setStatus)
-            .catch((err) => setStatus({connected: false, error: String(err)}));
-    }, []);
+    const [page, setPage] = useState<PageKey>('home');
+    const Page = pages[page].component;
 
     return (
         <div id="App">
-            <h1>Dashboard</h1>
-            <p role="status">{statusText(status)}</p>
+            <nav>
+                {(Object.keys(pages) as PageKey[]).map((key) => (
+                    <button
+                        key={key}
+                        type="button"
+                        aria-current={key === page ? 'page' : undefined}
+                        onClick={() => setPage(key)}
+                    >
+                        {pages[key].label}
+                    </button>
+                ))}
+            </nav>
+            <main>
+                <Page/>
+            </main>
         </div>
-    )
-}
-
-function statusText(status: Status): string {
-    if (status === 'loading') return 'Banco: verificando...';
-    if (status.connected) return 'Banco: conectado';
-    return `Banco: erro: ${status.error ?? 'desconhecido'}`;
+    );
 }
 
 export default App

@@ -9,9 +9,9 @@ import (
 )
 
 func TestOpen_InvalidURL(t *testing.T) {
-	_, err := db.Open(context.Background(), "isto não é uma url")
+	_, err := db.Open(context.Background(), "not a url")
 	if err == nil {
-		t.Fatal("esperava erro para URL inválida")
+		t.Fatal("expected an error for an invalid URL")
 	}
 }
 
@@ -19,6 +19,6 @@ func TestMigrate_IsIdempotent(t *testing.T) {
 	pool := testutil.Pool(t) // runs the migrations once
 
 	if err := db.Migrate(context.Background(), pool); err != nil {
-		t.Fatalf("segunda execução de Migrate falhou: %v", err)
+		t.Fatalf("second Migrate failed: %v", err)
 	}
 }

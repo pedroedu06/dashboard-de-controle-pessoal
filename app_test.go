@@ -21,7 +21,7 @@ func TestDBStatus_NotInitialized(t *testing.T) {
 	app := &App{ctx: context.Background()}
 
 	if got := app.DBStatus(); got.Connected || got.Error == "" {
-		t.Errorf("DBStatus = %+v, esperado erro", got)
+		t.Errorf("DBStatus = %+v, want an error", got)
 	}
 }
 
@@ -29,6 +29,6 @@ func TestDBStatus_Connected(t *testing.T) {
 	app := &App{ctx: context.Background(), pool: testutil.Pool(t)}
 
 	if got := app.DBStatus(); !got.Connected {
-		t.Errorf("DBStatus = %+v, esperado conectado", got)
+		t.Errorf("DBStatus = %+v, want connected", got)
 	}
 }

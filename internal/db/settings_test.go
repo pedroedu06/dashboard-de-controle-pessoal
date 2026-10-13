@@ -32,7 +32,7 @@ func TestSettings_UpsertAndGet(t *testing.T) {
 		t.Fatalf("UpsertSetting (update): %v", err)
 	}
 	if updated.UpdatedAt.Before(created.UpdatedAt) {
-		t.Errorf("updated_at não avançou: %v -> %v", created.UpdatedAt, updated.UpdatedAt)
+		t.Errorf("updated_at went backwards: %v -> %v", created.UpdatedAt, updated.UpdatedAt)
 	}
 
 	got, err := q.GetSetting(ctx, "theme")
@@ -40,16 +40,16 @@ func TestSettings_UpsertAndGet(t *testing.T) {
 		t.Fatalf("GetSetting: %v", err)
 	}
 	if string(got.Value) != `"light"` {
-		t.Errorf("Value = %s, esperado \"light\"", got.Value)
+		t.Errorf("Value = %s, want \"light\"", got.Value)
 	}
 }
 
 func TestSettings_GetMissingKey(t *testing.T) {
 	q := testutil.Queries(t)
 
-	_, err := q.GetSetting(context.Background(), "nao-existe")
+	_, err := q.GetSetting(context.Background(), "missing")
 	if !errors.Is(err, pgx.ErrNoRows) {
-		t.Fatalf("err = %v, esperado pgx.ErrNoRows", err)
+		t.Fatalf("err = %v, want pgx.ErrNoRows", err)
 	}
 }
 
@@ -72,6 +72,6 @@ func TestSettings_ListOrderedByKey(t *testing.T) {
 		keys = append(keys, s.Key)
 	}
 	if len(keys) != 3 || keys[0] != "a" || keys[1] != "b" || keys[2] != "c" {
-		t.Errorf("keys = %v, esperado [a b c]", keys)
+		t.Errorf("keys = %v, want [a b c]", keys)
 	}
 }

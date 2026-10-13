@@ -6,6 +6,8 @@ App desktop pessoal para gerenciar a vida: tarefas, finanças, estudos e aliment
 
 O React chama funções Go (bindings do Wails), e o Go conversa com o banco. O app só funciona online.
 
+**Funcionalidades:** [Tarefas](docs/produto/tarefas.md) (to-do com agenda). As regras de produto de cada módulo ficam em `docs/produto/`.
+
 ---
 
 ## Pré-requisitos
@@ -57,8 +59,8 @@ Isso roda os testes Go (`go test ./...`) e os do frontend (Vitest).
 
 | Tipo | Onde | Precisa de |
 |---|---|---|
-| Unitários Go | `internal/config`, `app_test.go` | nada |
-| Integração Go | `internal/db`, `app_test.go` | `TEST_DATABASE_URL` + Docker |
+| Unitários Go | `internal/config`, `internal/tasks` (regras da agenda), `app_test.go`, `task_api_test.go` | nada |
+| Integração Go | `internal/db`, `internal/tasks/service_test.go`, `app_test.go`, `task_api_test.go` | `TEST_DATABASE_URL` + Docker |
 | Frontend | `frontend/src/**/*.test.tsx` | nada (bindings do Wails são mockados) |
 
 ### Testes de integração (banco real)
@@ -112,18 +114,23 @@ Todos rodam com `go tool task <nome>`. Para listar: `go tool task --list`.
 ## Estrutura
 
 ```
-main.go, app.go          entrada do Wails e funções expostas ao frontend
+main.go, app.go          entrada do Wails e status do banco
+task_api.go              funções de tarefas expostas ao frontend
 internal/
   config/                carrega DATABASE_URL (ambiente / .env)
+  tasks/                 regras de produto das tarefas (validação, agenda) e persistência
   db/                    conexão (pgxpool) e migrations (goose, embutidas no binário)
     migrations/          arquivos .sql versionados
     queries/             queries SQL lidas pelo sqlc
     sqlc/                código Go gerado (não editar)
   testutil/              helpers dos testes de integração
 frontend/
-  src/                   React + TypeScript
+  src/
+    pages/               telas simples (Home)
+    features/tasks/      tela de tarefas: agenda, modal e chamadas ao Go
   wailsjs/               bindings gerados pelo Wails (não editar)
 sqlc.yaml                configuração do sqlc
 Taskfile.yml             comandos do projeto
 docker-compose.yml       Postgres de testes
+docs/                    ambiente e regras de produto
 ```

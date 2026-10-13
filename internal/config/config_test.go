@@ -21,7 +21,7 @@ func TestLoadFrom_UsesEnvironmentVariable(t *testing.T) {
 
 	cfg, err := LoadFrom()
 	if err != nil {
-		t.Fatalf("erro inesperado: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if cfg.DatabaseURL != "postgres://from-env" {
 		t.Errorf("DatabaseURL = %q", cfg.DatabaseURL)
@@ -35,7 +35,7 @@ func TestLoadFrom_ReadsDotEnvFile(t *testing.T) {
 
 	cfg, err := LoadFrom(file)
 	if err != nil {
-		t.Fatalf("erro inesperado: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if cfg.DatabaseURL != "postgres://from-file" {
 		t.Errorf("DatabaseURL = %q", cfg.DatabaseURL)
@@ -48,18 +48,18 @@ func TestLoadFrom_EnvironmentWinsOverFile(t *testing.T) {
 
 	cfg, err := LoadFrom(file)
 	if err != nil {
-		t.Fatalf("erro inesperado: %v", err)
+		t.Fatalf("unexpected error: %v", err)
 	}
 	if cfg.DatabaseURL != "postgres://from-env" {
-		t.Errorf("DatabaseURL = %q, esperado o valor do ambiente", cfg.DatabaseURL)
+		t.Errorf("DatabaseURL = %q, want the environment value", cfg.DatabaseURL)
 	}
 }
 
 func TestLoadFrom_IgnoresMissingFiles(t *testing.T) {
 	t.Setenv("DATABASE_URL", "postgres://from-env")
 
-	if _, err := LoadFrom(filepath.Join(t.TempDir(), "nao-existe.env")); err != nil {
-		t.Fatalf("erro inesperado: %v", err)
+	if _, err := LoadFrom(filepath.Join(t.TempDir(), "missing.env")); err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }
 
@@ -69,6 +69,6 @@ func TestLoadFrom_MissingDatabaseURL(t *testing.T) {
 
 	_, err := LoadFrom()
 	if !errors.Is(err, ErrMissingDatabaseURL) {
-		t.Fatalf("err = %v, esperado ErrMissingDatabaseURL", err)
+		t.Fatalf("err = %v, want ErrMissingDatabaseURL", err)
 	}
 }
