@@ -41,6 +41,8 @@ Crie um `.env` na raiz seguindo [docs/ambiente.md](docs/ambiente.md), que lista 
 go tool task setup
 ```
 
+O `setup` instala as dependências do frontend e gera os bindings do Wails (`frontend/wailsjs/go/`). Esses arquivos ficam fora do Git: são gerados a partir do código Go e mudam a cada alteração nele. O `wails dev` e o `wails build` também os geram.
+
 ```bash
 go tool task dev
 ```
@@ -100,7 +102,8 @@ Todos rodam com `go tool task <nome>`. Para listar: `go tool task --list`.
 
 | Comando | O que faz |
 |---|---|
-| `setup` | `npm install` no frontend |
+| `setup` | `npm install` no frontend + gera os bindings do Wails |
+| `bindings` | gera os bindings TS do Wails (`frontend/wailsjs/go/`) |
 | `dev` | abre o app em modo desenvolvimento |
 | `build` | gera o executável em `build/bin` |
 | `test` | todos os testes (Go + frontend) |
@@ -128,7 +131,7 @@ frontend/
   src/
     pages/               telas simples (Home)
     features/tasks/      tela de tarefas: agenda, modal e chamadas ao Go
-  wailsjs/               bindings gerados pelo Wails (não editar)
+  wailsjs/               bindings gerados pelo Wails (go/ fica fora do Git)
 sqlc.yaml                configuração do sqlc
 Taskfile.yml             comandos do projeto
 docker-compose.yml       Postgres de testes

@@ -18,10 +18,15 @@ tasks:
       - wails build
 
   setup:
-    desc: Instala as dependências do frontend
-    dir: frontend
+    desc: Instala as dependências do frontend e gera os bindings do Wails
     cmds:
-      - npm install
+      - cd frontend && npm install
+      - task: bindings
+
+  bindings:
+    desc: Gera os bindings TS do Wails (frontend/wailsjs/go, fora do Git)
+    cmds:
+      - wails generate module
 
   test:
     desc: Roda todos os testes (Go + frontend)
@@ -36,21 +41,22 @@ tasks:
 
   test:front:
     desc: Testes do frontend (Vitest)
-    dir: frontend
     cmds:
-      - npm run test
+      - task: bindings
+      - cd frontend && npm run test
 
   generate:
     desc: Gera o código do sqlc e os bindings TS do Wails
     cmds:
       - go tool sqlc generate
-      - wails generate module
+      - task: bindings
 
   lint:
     desc: Checagens estáticas (go vet, sqlc diff, tsc)
     cmds:
       - go vet ./...
       - go tool sqlc diff
+      - task: bindings
       - cd frontend && npx tsc --noEmit
 
   migrate:up:
