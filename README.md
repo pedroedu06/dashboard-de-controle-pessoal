@@ -6,7 +6,7 @@ App desktop pessoal para gerenciar a vida: tarefas, finanças, estudos e aliment
 
 O React chama funções Go (bindings do Wails), e o Go conversa com o banco. O app só funciona online.
 
-**Funcionalidades:** [Tarefas](docs/produto/tarefas.md) (to-do com agenda, categorias, filtros, lista de itens e tarefas recorrentes). As regras de produto de cada módulo ficam em `docs/produto/`.
+**Funcionalidades:** [Tarefas](docs/produto/tarefas.md) (to-do com agenda, categorias, filtros, lista de itens e tarefas recorrentes) e [Estudos](docs/produto/estudos.md) (matérias, tópicos, timer, progresso e metas semanais). As regras de produto de cada módulo ficam em `docs/produto/`.
 
 ---
 
@@ -113,15 +113,18 @@ Todos rodam com `go tool task <nome>`. Para listar: `go tool task --list`.
 | `migrate:new -- nome` | cria uma migration nova |
 | `migrate:up` / `migrate:down` / `migrate:status` | migrations no `DATABASE_URL` |
 | `db:test:up` / `db:test:down` | sobe/derruba o Postgres de testes (porta 54329) |
+| `db:test:reset` | apaga os dados do Postgres de testes (use se rodou o app contra ele) |
 
 ## Estrutura
 
 ```
 main.go, app.go          entrada do Wails e status do banco
 task_api.go              funções de tarefas expostas ao frontend
+study_api.go             funções de estudos expostas ao frontend
 internal/
   config/                carrega DATABASE_URL (ambiente / .env)
   tasks/                 regras de produto das tarefas (validação, agenda) e persistência
+  studies/               regras de produto dos estudos (timer, progresso, metas) e persistência
   db/                    conexão (pgxpool) e migrations (goose, embutidas no binário)
     migrations/          arquivos .sql versionados
     queries/             queries SQL lidas pelo sqlc
@@ -131,6 +134,7 @@ frontend/
   src/
     pages/               telas simples (Home)
     features/tasks/      tela de tarefas: agenda, modal e chamadas ao Go
+    features/studies/    tela de estudos: timer, metas, matérias e sessões
   wailsjs/               bindings gerados pelo Wails (go/ fica fora do Git)
 sqlc.yaml                configuração do sqlc
 Taskfile.yml             comandos do projeto

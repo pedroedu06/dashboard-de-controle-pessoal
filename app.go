@@ -7,6 +7,7 @@ import (
 
 	"dashboard/internal/config"
 	"dashboard/internal/db"
+	"dashboard/internal/studies"
 	"dashboard/internal/tasks"
 )
 
@@ -15,7 +16,9 @@ type App struct {
 	ctx   context.Context
 	pool  *pgxpool.Pool
 	dbErr error
-	tasks *tasks.Service // nil while the database is unavailable
+	// Feature services; nil while the database is unavailable.
+	tasks   *tasks.Service
+	studies *studies.Service
 }
 
 // DBStatus is the database connection state sent to the frontend.
@@ -34,6 +37,7 @@ func (a *App) startup(ctx context.Context) {
 	a.pool, a.dbErr = connect(ctx)
 	if a.dbErr == nil {
 		a.tasks = tasks.NewService(a.pool)
+		a.studies = studies.NewService(a.pool)
 	}
 }
 

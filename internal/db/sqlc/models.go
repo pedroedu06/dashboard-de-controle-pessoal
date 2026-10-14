@@ -97,10 +97,77 @@ func (ns NullTaskUrgency) Value() (driver.Value, error) {
 	return string(ns.TaskUrgency), nil
 }
 
+type TopicStatus string
+
+const (
+	TopicStatusNotSeen  TopicStatus = "not_seen"
+	TopicStatusStudying TopicStatus = "studying"
+	TopicStatusReviewed TopicStatus = "reviewed"
+)
+
+func (e *TopicStatus) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = TopicStatus(s)
+	case string:
+		*e = TopicStatus(s)
+	default:
+		return fmt.Errorf("unsupported scan type for TopicStatus: %T", src)
+	}
+	return nil
+}
+
+type NullTopicStatus struct {
+	TopicStatus TopicStatus `json:"topic_status"`
+	Valid       bool        `json:"valid"` // Valid is true if TopicStatus is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullTopicStatus) Scan(value interface{}) error {
+	if value == nil {
+		ns.TopicStatus, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.TopicStatus.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullTopicStatus) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.TopicStatus), nil
+}
+
 type Setting struct {
 	Key       string          `json:"key"`
 	Value     json.RawMessage `json:"value"`
 	UpdatedAt time.Time       `json:"updated_at"`
+}
+
+type StudyGoal struct {
+	ID            int64     `json:"id"`
+	SubjectID     *int64    `json:"subject_id"`
+	TargetMinutes int32     `json:"target_minutes"`
+	CreatedAt     time.Time `json:"created_at"`
+}
+
+type StudySession struct {
+	ID            int64      `json:"id"`
+	SubjectID     int64      `json:"subject_id"`
+	TopicID       *int64     `json:"topic_id"`
+	StartedAt     time.Time  `json:"started_at"`
+	EndedAt       *time.Time `json:"ended_at"`
+	PausedAt      *time.Time `json:"paused_at"`
+	PausedSeconds int32      `json:"paused_seconds"`
+}
+
+type Subject struct {
+	ID         int64      `json:"id"`
+	Name       string     `json:"name"`
+	ArchivedAt *time.Time `json:"archived_at"`
+	CreatedAt  time.Time  `json:"created_at"`
 }
 
 type Task struct {
@@ -135,4 +202,12 @@ type TaskOccurrence struct {
 	TaskID   int64     `json:"task_id"`
 	OccursOn time.Time `json:"occurs_on"`
 	DoneAt   time.Time `json:"done_at"`
+}
+
+type Topic struct {
+	ID        int64       `json:"id"`
+	SubjectID int64       `json:"subject_id"`
+	Title     string      `json:"title"`
+	Status    TopicStatus `json:"status"`
+	CreatedAt time.Time   `json:"created_at"`
 }

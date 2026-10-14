@@ -1,10 +1,12 @@
 import {useState} from 'react';
 import {Home} from './pages/Home';
 import {TasksPage} from './features/tasks/TasksPage';
+import {StudiesPage} from './features/studies/StudiesPage';
 
 const pages = {
     home: {label: 'Home', component: Home},
     tasks: {label: 'Tarefas', component: TasksPage},
+    studies: {label: 'Estudos', component: StudiesPage},
 };
 
 type PageKey = keyof typeof pages;

@@ -87,6 +87,14 @@ tasks:
     cmds:
       - docker compose up -d --wait
 
+  db:test:reset:
+    desc: Apaga os dados do Postgres de testes (mantém o schema)
+    cmds:
+      - >-
+        docker compose exec -T postgres-test psql -U postgres -d dashboard_test -c
+        "DO \$\$ DECLARE t text; BEGIN FOR t IN SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename <> 'goose_db_version'
+        LOOP EXECUTE format('TRUNCATE %I RESTART IDENTITY CASCADE', t); END LOOP; END \$\$;"
+
   db:test:down:
     desc: Derruba o Postgres de testes (os dados são mantidos no volume)
     cmds:

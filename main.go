@@ -14,6 +14,7 @@ var assets embed.FS
 func main() {
 	app := NewApp()
 	taskAPI := &TaskAPI{app: app}
+	studyAPI := &StudyAPI{app: app}
 
 	err := wails.Run(&options.App{
 		Title:  "dashboard",
@@ -28,6 +29,7 @@ func main() {
 		Bind: []interface{}{
 			app,
 			taskAPI,
+			studyAPI,
 		},
 	})
 
