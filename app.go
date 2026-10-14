@@ -7,7 +7,6 @@ import (
 
 	"dashboard/internal/config"
 	"dashboard/internal/db"
-	"dashboard/internal/db/sqlc"
 	"dashboard/internal/tasks"
 )
 
@@ -34,7 +33,7 @@ func (a *App) startup(ctx context.Context) {
 	// A database failure must not crash the app; it is reported via DBStatus.
 	a.pool, a.dbErr = connect(ctx)
 	if a.dbErr == nil {
-		a.tasks = tasks.NewService(sqlc.New(a.pool))
+		a.tasks = tasks.NewService(a.pool)
 	}
 }
 

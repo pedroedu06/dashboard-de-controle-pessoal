@@ -1,88 +1,133 @@
 import {fireEvent, render, screen, waitFor, within} from '@testing-library/react';
 import {beforeEach, describe, expect, it, vi} from 'vitest';
 import {TasksPage} from './TasksPage';
-import {Agenda, Task, tasksApi} from './api';
+import {Agenda, tasksApi} from './api';
 import {toLocalInput} from './dates';
+import {makeTask} from './fixtures';
 
 vi.mock('./api', async (importOriginal) => ({
     ...(await importOriginal<typeof import('./api')>()),
-    tasksApi: {agenda: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), setDone: vi.fn()},
+    tasksApi: {
+        agenda: vi.fn(),
+        categories: vi.fn(),
+        create: vi.fn(),
+        update: vi.fn(),
+        remove: vi.fn(),
+        setDone: vi.fn(),
+        setItemDone: vi.fn(),
+    },
 }));
 
 const api = vi.mocked(tasksApi);
 
 const today = toLocalInput(new Date()).slice(0, 10);
 
-function makeTask(overrides: Partial<Task>): Task {
-    return {
-        id: 1,
-        title: 'Tarefa',
-        urgency: 'medium',
-        startsAt: new Date().toISOString(),
-        endsAt: new Date(Date.now() + 3_600_000).toISOString(),
-        done: false,
-        ...overrides,
-    };
-}
+const shopping = makeTask({
+    id: 4,
+    title: 'Mercado',
+    category: 'Casa',
+    items: [{id: 40, title: 'arroz', done: true}, {id: 41, title: 'café', done: false}],
+});
+const gym = makeTask({
+    id: 5,
+    title: 'Academia',
+    repeat: {kind: 'weekly', weekdays: [1, 3], until: ''},
+    occursOn: today,
+});
 
 const agenda: Agenda = {
     overdue: [makeTask({id: 1, title: 'Pagar conta', urgency: 'high'})],
-    days: [{date: today, tasks: [makeTask({id: 2, title: 'Estudar Go'}), makeTask({id: 3, title: 'Treinar', done: true})]}],
+    days: [{
+        date: today,
+        tasks: [makeTask({id: 2, title: 'Estudar Go', category: 'Faculdade'}), makeTask({id: 3, title: 'Treinar', done: true}), shopping, gym],
+    }],
 };
+
+async function renderPage() {
+    render(<TasksPage/>);
+    return screen.findByRole('region', {name: 'Hoje'});
+}
 
 describe('TasksPage', () => {
     beforeEach(() => {
         vi.resetAllMocks();
         api.agenda.mockResolvedValue(agenda);
+        api.categories.mockResolvedValue(['Casa', 'Faculdade']);
+        api.setDone.mockResolvedValue();
+        api.setItemDone.mockResolvedValue();
     });
 
-    it('renders overdue and day groups', async () => {
-        render(<TasksPage/>);
+    it('renders overdue and day groups with task details', async () => {
+        const todayGroup = await renderPage();
 
-        const overdue = await screen.findByRole('region', {name: 'Atrasadas'});
-        expect(within(overdue).getByText('Pagar conta')).toBeInTheDocument();
+        const overdue = screen.getByRole('region', {name: 'Atrasadas'});
         expect(within(overdue).getByText(/Urgência Alta/)).toBeInTheDocument();
-
-        const todayGroup = screen.getByRole('region', {name: 'Hoje'});
-        expect(within(todayGroup).getByText('Estudar Go')).toBeInTheDocument();
+        expect(within(todayGroup).getByText(/\[Faculdade\]/)).toBeInTheDocument();
         expect(within(todayGroup).getByText('Treinar').tagName).toBe('S');
+        expect(within(todayGroup).getByText(/Repete: seg, qua/)).toBeInTheDocument();
+        expect(within(todayGroup).getByText(/Itens 1\/2/)).toBeInTheDocument();
     });
 
-    it('toggles done and reloads', async () => {
-        api.setDone.mockResolvedValue(makeTask({}));
-        render(<TasksPage/>);
+    it('lists the checklist and disables manual completion', async () => {
+        await renderPage();
 
-        fireEvent.click(await screen.findByRole('checkbox', {name: 'Concluir Treinar'}));
+        const list = screen.getByRole('list', {name: 'Itens de Mercado'});
+        expect(within(list).getByRole('checkbox', {name: 'arroz'})).toBeChecked();
+        expect(screen.getByRole('checkbox', {name: 'Concluir Mercado'})).toBeDisabled();
+    });
 
-        await waitFor(() => expect(api.setDone).toHaveBeenCalledWith(3, false));
+    it('checks an item and reloads', async () => {
+        await renderPage();
+
+        fireEvent.click(screen.getByRole('checkbox', {name: 'café'}));
+
+        await waitFor(() => expect(api.setItemDone).toHaveBeenCalledWith(shopping, shopping.items[1], true));
         await waitFor(() => expect(api.agenda).toHaveBeenCalledTimes(2));
     });
 
-    it('deletes after confirmation', async () => {
-        vi.spyOn(window, 'confirm').mockReturnValue(true);
+    it('completes a recurring occurrence with its task (and day)', async () => {
+        await renderPage();
+
+        fireEvent.click(screen.getByRole('checkbox', {name: 'Concluir Academia'}));
+
+        await waitFor(() => expect(api.setDone).toHaveBeenCalledWith(gym, true));
+    });
+
+    it('filters by category and urgency', async () => {
+        await renderPage();
+
+        fireEvent.change(screen.getByLabelText('Filtrar categoria'), {target: {value: 'Casa'}});
+        await waitFor(() => expect(api.agenda).toHaveBeenLastCalledWith({category: 'Casa', urgency: ''}));
+
+        fireEvent.change(screen.getByLabelText('Filtrar urgência'), {target: {value: 'high'}});
+        await waitFor(() => expect(api.agenda).toHaveBeenLastCalledWith({category: 'Casa', urgency: 'high'}));
+    });
+
+    it('deletes after confirmation, mentioning the whole series', async () => {
+        const confirm = vi.spyOn(window, 'confirm').mockReturnValue(true);
         api.remove.mockResolvedValue();
-        render(<TasksPage/>);
+        const todayGroup = await renderPage();
 
-        const overdue = await screen.findByRole('region', {name: 'Atrasadas'});
-        fireEvent.click(within(overdue).getByRole('button', {name: 'Excluir'}));
+        const gymRow = within(todayGroup).getByText(/Academia/).closest('li')!;
+        fireEvent.click(within(gymRow).getByRole('button', {name: 'Excluir'}));
 
-        await waitFor(() => expect(api.remove).toHaveBeenCalledWith(1));
+        expect(confirm).toHaveBeenCalledWith(expect.stringContaining('todas as ocorrências'));
+        await waitFor(() => expect(api.remove).toHaveBeenCalledWith(5));
     });
 
     it('does not delete when cancelled', async () => {
         vi.spyOn(window, 'confirm').mockReturnValue(false);
-        render(<TasksPage/>);
+        await renderPage();
 
-        const overdue = await screen.findByRole('region', {name: 'Atrasadas'});
+        const overdue = screen.getByRole('region', {name: 'Atrasadas'});
         fireEvent.click(within(overdue).getByRole('button', {name: 'Excluir'}));
 
         expect(api.remove).not.toHaveBeenCalled();
     });
 
     it('creates a task through the modal', async () => {
-        api.create.mockResolvedValue(makeTask({}));
-        render(<TasksPage/>);
-        await screen.findByRole('region', {name: 'Hoje'});
+        api.create.mockResolvedValue(makeTask());
+        await renderPage();
 
         fireEvent.click(screen.getByRole('button', {name: 'Nova tarefa'}));
         fireEvent.change(screen.getByLabelText('Nome'), {target: {value: 'Ler'}});
@@ -93,10 +138,10 @@ describe('TasksPage', () => {
     });
 
     it('edits a task through the modal', async () => {
-        api.update.mockResolvedValue(makeTask({}));
-        render(<TasksPage/>);
+        api.update.mockResolvedValue(makeTask());
+        await renderPage();
 
-        const overdue = await screen.findByRole('region', {name: 'Atrasadas'});
+        const overdue = screen.getByRole('region', {name: 'Atrasadas'});
         fireEvent.click(within(overdue).getByRole('button', {name: 'Editar'}));
         expect(screen.getByLabelText('Nome')).toHaveValue('Pagar conta');
         fireEvent.change(screen.getByLabelText('Nome'), {target: {value: 'Pagar luz'}});

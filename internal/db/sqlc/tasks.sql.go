@@ -11,16 +11,20 @@ import (
 )
 
 const createTask = `-- name: CreateTask :one
-INSERT INTO tasks (title, urgency, starts_at, ends_at)
-VALUES ($1, $2, $3, $4)
-RETURNING id, title, urgency, starts_at, ends_at, done_at, created_at, updated_at
+INSERT INTO tasks (title, urgency, starts_at, ends_at, category, repeat, repeat_weekdays, repeat_until)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+RETURNING id, title, urgency, starts_at, ends_at, done_at, created_at, updated_at, category, repeat, repeat_weekdays, repeat_until
 `
 
 type CreateTaskParams struct {
-	Title    string      `json:"title"`
-	Urgency  TaskUrgency `json:"urgency"`
-	StartsAt time.Time   `json:"starts_at"`
-	EndsAt   time.Time   `json:"ends_at"`
+	Title          string      `json:"title"`
+	Urgency        TaskUrgency `json:"urgency"`
+	StartsAt       time.Time   `json:"starts_at"`
+	EndsAt         time.Time   `json:"ends_at"`
+	Category       *string     `json:"category"`
+	Repeat         TaskRepeat  `json:"repeat"`
+	RepeatWeekdays []int16     `json:"repeat_weekdays"`
+	RepeatUntil    *time.Time  `json:"repeat_until"`
 }
 
 func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, error) {
@@ -29,6 +33,10 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, e
 		arg.Urgency,
 		arg.StartsAt,
 		arg.EndsAt,
+		arg.Category,
+		arg.Repeat,
+		arg.RepeatWeekdays,
+		arg.RepeatUntil,
 	)
 	var i Task
 	err := row.Scan(
@@ -40,8 +48,57 @@ func (q *Queries) CreateTask(ctx context.Context, arg CreateTaskParams) (Task, e
 		&i.DoneAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Category,
+		&i.Repeat,
+		&i.RepeatWeekdays,
+		&i.RepeatUntil,
 	)
 	return i, err
+}
+
+const deleteItemCheck = `-- name: DeleteItemCheck :exec
+DELETE FROM task_item_checks
+WHERE item_id = $1 AND occurs_on = $2
+`
+
+type DeleteItemCheckParams struct {
+	ItemID   int64     `json:"item_id"`
+	OccursOn time.Time `json:"occurs_on"`
+}
+
+func (q *Queries) DeleteItemCheck(ctx context.Context, arg DeleteItemCheckParams) error {
+	_, err := q.db.Exec(ctx, deleteItemCheck, arg.ItemID, arg.OccursOn)
+	return err
+}
+
+const deleteItemsNotIn = `-- name: DeleteItemsNotIn :exec
+DELETE FROM task_items
+WHERE task_id = $1 AND NOT (id = ANY($2::bigint[]))
+`
+
+type DeleteItemsNotInParams struct {
+	TaskID  int64   `json:"task_id"`
+	KeepIds []int64 `json:"keep_ids"`
+}
+
+func (q *Queries) DeleteItemsNotIn(ctx context.Context, arg DeleteItemsNotInParams) error {
+	_, err := q.db.Exec(ctx, deleteItemsNotIn, arg.TaskID, arg.KeepIds)
+	return err
+}
+
+const deleteOccurrence = `-- name: DeleteOccurrence :exec
+DELETE FROM task_occurrences
+WHERE task_id = $1 AND occurs_on = $2
+`
+
+type DeleteOccurrenceParams struct {
+	TaskID   int64     `json:"task_id"`
+	OccursOn time.Time `json:"occurs_on"`
+}
+
+func (q *Queries) DeleteOccurrence(ctx context.Context, arg DeleteOccurrenceParams) error {
+	_, err := q.db.Exec(ctx, deleteOccurrence, arg.TaskID, arg.OccursOn)
+	return err
 }
 
 const deleteTask = `-- name: DeleteTask :execrows
@@ -57,8 +114,39 @@ func (q *Queries) DeleteTask(ctx context.Context, id int64) (int64, error) {
 	return result.RowsAffected(), nil
 }
 
+const findCategory = `-- name: FindCategory :one
+SELECT category::text FROM tasks
+WHERE lower(category) = lower($1::text)
+LIMIT 1
+`
+
+func (q *Queries) FindCategory(ctx context.Context, name string) (string, error) {
+	row := q.db.QueryRow(ctx, findCategory, name)
+	var category string
+	err := row.Scan(&category)
+	return category, err
+}
+
+const getItem = `-- name: GetItem :one
+SELECT id, task_id, title, position, done_at FROM task_items
+WHERE id = $1
+`
+
+func (q *Queries) GetItem(ctx context.Context, id int64) (TaskItem, error) {
+	row := q.db.QueryRow(ctx, getItem, id)
+	var i TaskItem
+	err := row.Scan(
+		&i.ID,
+		&i.TaskID,
+		&i.Title,
+		&i.Position,
+		&i.DoneAt,
+	)
+	return i, err
+}
+
 const getTask = `-- name: GetTask :one
-SELECT id, title, urgency, starts_at, ends_at, done_at, created_at, updated_at FROM tasks
+SELECT id, title, urgency, starts_at, ends_at, done_at, created_at, updated_at, category, repeat, repeat_weekdays, repeat_until FROM tasks
 WHERE id = $1
 `
 
@@ -74,17 +162,62 @@ func (q *Queries) GetTask(ctx context.Context, id int64) (Task, error) {
 		&i.DoneAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Category,
+		&i.Repeat,
+		&i.RepeatWeekdays,
+		&i.RepeatUntil,
 	)
 	return i, err
 }
 
+const insertItem = `-- name: InsertItem :one
+INSERT INTO task_items (task_id, title, position)
+VALUES ($1, $2, $3)
+RETURNING id, task_id, title, position, done_at
+`
+
+type InsertItemParams struct {
+	TaskID   int64  `json:"task_id"`
+	Title    string `json:"title"`
+	Position int32  `json:"position"`
+}
+
+func (q *Queries) InsertItem(ctx context.Context, arg InsertItemParams) (TaskItem, error) {
+	row := q.db.QueryRow(ctx, insertItem, arg.TaskID, arg.Title, arg.Position)
+	var i TaskItem
+	err := row.Scan(
+		&i.ID,
+		&i.TaskID,
+		&i.Title,
+		&i.Position,
+		&i.DoneAt,
+	)
+	return i, err
+}
+
+const insertItemCheck = `-- name: InsertItemCheck :exec
+INSERT INTO task_item_checks (item_id, occurs_on)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+`
+
+type InsertItemCheckParams struct {
+	ItemID   int64     `json:"item_id"`
+	OccursOn time.Time `json:"occurs_on"`
+}
+
+func (q *Queries) InsertItemCheck(ctx context.Context, arg InsertItemCheckParams) error {
+	_, err := q.db.Exec(ctx, insertItemCheck, arg.ItemID, arg.OccursOn)
+	return err
+}
+
 const listAgendaTasks = `-- name: ListAgendaTasks :many
-SELECT id, title, urgency, starts_at, ends_at, done_at, created_at, updated_at FROM tasks
-WHERE ends_at >= $1 OR done_at IS NULL
+SELECT id, title, urgency, starts_at, ends_at, done_at, created_at, updated_at, category, repeat, repeat_weekdays, repeat_until FROM tasks
+WHERE repeat <> 'none' OR ends_at >= $1 OR done_at IS NULL
 ORDER BY starts_at, id
 `
 
-// Agenda: everything ending at or after @since, plus anything still not done.
+// Agenda: recurring tasks, everything ending at or after @since, and anything still not done.
 func (q *Queries) ListAgendaTasks(ctx context.Context, since time.Time) ([]Task, error) {
 	rows, err := q.db.Query(ctx, listAgendaTasks, since)
 	if err != nil {
@@ -103,6 +236,10 @@ func (q *Queries) ListAgendaTasks(ctx context.Context, since time.Time) ([]Task,
 			&i.DoneAt,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			&i.Category,
+			&i.Repeat,
+			&i.RepeatWeekdays,
+			&i.RepeatUntil,
 		); err != nil {
 			return nil, err
 		}
@@ -114,12 +251,151 @@ func (q *Queries) ListAgendaTasks(ctx context.Context, since time.Time) ([]Task,
 	return items, nil
 }
 
+const listCategories = `-- name: ListCategories :many
+SELECT min(category)::text AS category FROM tasks
+WHERE category IS NOT NULL
+GROUP BY lower(category)
+ORDER BY lower(category)
+`
+
+func (q *Queries) ListCategories(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listCategories)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []string{}
+	for rows.Next() {
+		var category string
+		if err := rows.Scan(&category); err != nil {
+			return nil, err
+		}
+		items = append(items, category)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listItemChecks = `-- name: ListItemChecks :many
+SELECT item_id, occurs_on FROM task_item_checks
+WHERE item_id = ANY($1::bigint[])
+  AND occurs_on BETWEEN $2 AND $3
+`
+
+type ListItemChecksParams struct {
+	ItemIds []int64   `json:"item_ids"`
+	FromDay time.Time `json:"from_day"`
+	ToDay   time.Time `json:"to_day"`
+}
+
+func (q *Queries) ListItemChecks(ctx context.Context, arg ListItemChecksParams) ([]TaskItemCheck, error) {
+	rows, err := q.db.Query(ctx, listItemChecks, arg.ItemIds, arg.FromDay, arg.ToDay)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TaskItemCheck{}
+	for rows.Next() {
+		var i TaskItemCheck
+		if err := rows.Scan(&i.ItemID, &i.OccursOn); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listItemsByTasks = `-- name: ListItemsByTasks :many
+SELECT id, task_id, title, position, done_at FROM task_items
+WHERE task_id = ANY($1::bigint[])
+ORDER BY task_id, position, id
+`
+
+func (q *Queries) ListItemsByTasks(ctx context.Context, taskIds []int64) ([]TaskItem, error) {
+	rows, err := q.db.Query(ctx, listItemsByTasks, taskIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TaskItem{}
+	for rows.Next() {
+		var i TaskItem
+		if err := rows.Scan(
+			&i.ID,
+			&i.TaskID,
+			&i.Title,
+			&i.Position,
+			&i.DoneAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOccurrences = `-- name: ListOccurrences :many
+SELECT task_id, occurs_on, done_at FROM task_occurrences
+WHERE task_id = ANY($1::bigint[])
+  AND occurs_on BETWEEN $2 AND $3
+`
+
+type ListOccurrencesParams struct {
+	TaskIds []int64   `json:"task_ids"`
+	FromDay time.Time `json:"from_day"`
+	ToDay   time.Time `json:"to_day"`
+}
+
+func (q *Queries) ListOccurrences(ctx context.Context, arg ListOccurrencesParams) ([]TaskOccurrence, error) {
+	rows, err := q.db.Query(ctx, listOccurrences, arg.TaskIds, arg.FromDay, arg.ToDay)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []TaskOccurrence{}
+	for rows.Next() {
+		var i TaskOccurrence
+		if err := rows.Scan(&i.TaskID, &i.OccursOn, &i.DoneAt); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setItemDone = `-- name: SetItemDone :exec
+UPDATE task_items
+SET done_at = CASE WHEN $1::boolean THEN coalesce(done_at, now()) END
+WHERE id = $2
+`
+
+type SetItemDoneParams struct {
+	Done bool  `json:"done"`
+	ID   int64 `json:"id"`
+}
+
+func (q *Queries) SetItemDone(ctx context.Context, arg SetItemDoneParams) error {
+	_, err := q.db.Exec(ctx, setItemDone, arg.Done, arg.ID)
+	return err
+}
+
 const setTaskDone = `-- name: SetTaskDone :one
 UPDATE tasks
 SET done_at = CASE WHEN $1::boolean THEN coalesce(done_at, now()) END,
     updated_at = now()
 WHERE id = $2
-RETURNING id, title, urgency, starts_at, ends_at, done_at, created_at, updated_at
+RETURNING id, title, urgency, starts_at, ends_at, done_at, created_at, updated_at, category, repeat, repeat_weekdays, repeat_until
 `
 
 type SetTaskDoneParams struct {
@@ -139,8 +415,39 @@ func (q *Queries) SetTaskDone(ctx context.Context, arg SetTaskDoneParams) (Task,
 		&i.DoneAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Category,
+		&i.Repeat,
+		&i.RepeatWeekdays,
+		&i.RepeatUntil,
 	)
 	return i, err
+}
+
+const updateItem = `-- name: UpdateItem :execrows
+UPDATE task_items
+SET title = $1,
+    position = $2
+WHERE id = $3 AND task_id = $4
+`
+
+type UpdateItemParams struct {
+	Title    string `json:"title"`
+	Position int32  `json:"position"`
+	ID       int64  `json:"id"`
+	TaskID   int64  `json:"task_id"`
+}
+
+func (q *Queries) UpdateItem(ctx context.Context, arg UpdateItemParams) (int64, error) {
+	result, err := q.db.Exec(ctx, updateItem,
+		arg.Title,
+		arg.Position,
+		arg.ID,
+		arg.TaskID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const updateTask = `-- name: UpdateTask :one
@@ -149,17 +456,25 @@ SET title = $1,
     urgency = $2,
     starts_at = $3,
     ends_at = $4,
+    category = $5,
+    repeat = $6,
+    repeat_weekdays = $7,
+    repeat_until = $8,
     updated_at = now()
-WHERE id = $5
-RETURNING id, title, urgency, starts_at, ends_at, done_at, created_at, updated_at
+WHERE id = $9
+RETURNING id, title, urgency, starts_at, ends_at, done_at, created_at, updated_at, category, repeat, repeat_weekdays, repeat_until
 `
 
 type UpdateTaskParams struct {
-	Title    string      `json:"title"`
-	Urgency  TaskUrgency `json:"urgency"`
-	StartsAt time.Time   `json:"starts_at"`
-	EndsAt   time.Time   `json:"ends_at"`
-	ID       int64       `json:"id"`
+	Title          string      `json:"title"`
+	Urgency        TaskUrgency `json:"urgency"`
+	StartsAt       time.Time   `json:"starts_at"`
+	EndsAt         time.Time   `json:"ends_at"`
+	Category       *string     `json:"category"`
+	Repeat         TaskRepeat  `json:"repeat"`
+	RepeatWeekdays []int16     `json:"repeat_weekdays"`
+	RepeatUntil    *time.Time  `json:"repeat_until"`
+	ID             int64       `json:"id"`
 }
 
 func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, error) {
@@ -168,6 +483,10 @@ func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, e
 		arg.Urgency,
 		arg.StartsAt,
 		arg.EndsAt,
+		arg.Category,
+		arg.Repeat,
+		arg.RepeatWeekdays,
+		arg.RepeatUntil,
 		arg.ID,
 	)
 	var i Task
@@ -180,6 +499,26 @@ func (q *Queries) UpdateTask(ctx context.Context, arg UpdateTaskParams) (Task, e
 		&i.DoneAt,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.Category,
+		&i.Repeat,
+		&i.RepeatWeekdays,
+		&i.RepeatUntil,
 	)
 	return i, err
+}
+
+const upsertOccurrence = `-- name: UpsertOccurrence :exec
+INSERT INTO task_occurrences (task_id, occurs_on)
+VALUES ($1, $2)
+ON CONFLICT DO NOTHING
+`
+
+type UpsertOccurrenceParams struct {
+	TaskID   int64     `json:"task_id"`
+	OccursOn time.Time `json:"occurs_on"`
+}
+
+func (q *Queries) UpsertOccurrence(ctx context.Context, arg UpsertOccurrenceParams) error {
+	_, err := q.db.Exec(ctx, upsertOccurrence, arg.TaskID, arg.OccursOn)
+	return err
 }

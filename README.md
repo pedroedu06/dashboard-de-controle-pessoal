@@ -6,7 +6,7 @@ App desktop pessoal para gerenciar a vida: tarefas, finanças, estudos e aliment
 
 O React chama funções Go (bindings do Wails), e o Go conversa com o banco. O app só funciona online.
 
-**Funcionalidades:** [Tarefas](docs/produto/tarefas.md) (to-do com agenda). As regras de produto de cada módulo ficam em `docs/produto/`.
+**Funcionalidades:** [Tarefas](docs/produto/tarefas.md) (to-do com agenda, categorias, filtros, lista de itens e tarefas recorrentes). As regras de produto de cada módulo ficam em `docs/produto/`.
 
 ---
 

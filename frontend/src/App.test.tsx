@@ -8,13 +8,14 @@ import {tasksApi} from './features/tasks/api';
 vi.mock('../wailsjs/go/main/App', () => ({DBStatus: vi.fn()}));
 vi.mock('./features/tasks/api', async (importOriginal) => ({
     ...(await importOriginal<typeof import('./features/tasks/api')>()),
-    tasksApi: {agenda: vi.fn()},
+    tasksApi: {agenda: vi.fn(), categories: vi.fn()},
 }));
 
 describe('App', () => {
     beforeEach(() => {
         vi.mocked(DBStatus).mockResolvedValue({connected: true});
         vi.mocked(tasksApi.agenda).mockResolvedValue({overdue: [], days: []});
+        vi.mocked(tasksApi.categories).mockResolvedValue([]);
     });
 
     it('starts on Home', async () => {

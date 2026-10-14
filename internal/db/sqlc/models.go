@@ -11,6 +11,49 @@ import (
 	"time"
 )
 
+type TaskRepeat string
+
+const (
+	TaskRepeatNone   TaskRepeat = "none"
+	TaskRepeatDaily  TaskRepeat = "daily"
+	TaskRepeatWeekly TaskRepeat = "weekly"
+)
+
+func (e *TaskRepeat) Scan(src interface{}) error {
+	switch s := src.(type) {
+	case []byte:
+		*e = TaskRepeat(s)
+	case string:
+		*e = TaskRepeat(s)
+	default:
+		return fmt.Errorf("unsupported scan type for TaskRepeat: %T", src)
+	}
+	return nil
+}
+
+type NullTaskRepeat struct {
+	TaskRepeat TaskRepeat `json:"task_repeat"`
+	Valid      bool       `json:"valid"` // Valid is true if TaskRepeat is not NULL
+}
+
+// Scan implements the Scanner interface.
+func (ns *NullTaskRepeat) Scan(value interface{}) error {
+	if value == nil {
+		ns.TaskRepeat, ns.Valid = "", false
+		return nil
+	}
+	ns.Valid = true
+	return ns.TaskRepeat.Scan(value)
+}
+
+// Value implements the driver Valuer interface.
+func (ns NullTaskRepeat) Value() (driver.Value, error) {
+	if !ns.Valid {
+		return nil, nil
+	}
+	return string(ns.TaskRepeat), nil
+}
+
 type TaskUrgency string
 
 const (
@@ -61,12 +104,35 @@ type Setting struct {
 }
 
 type Task struct {
-	ID        int64       `json:"id"`
-	Title     string      `json:"title"`
-	Urgency   TaskUrgency `json:"urgency"`
-	StartsAt  time.Time   `json:"starts_at"`
-	EndsAt    time.Time   `json:"ends_at"`
-	DoneAt    *time.Time  `json:"done_at"`
-	CreatedAt time.Time   `json:"created_at"`
-	UpdatedAt time.Time   `json:"updated_at"`
+	ID             int64       `json:"id"`
+	Title          string      `json:"title"`
+	Urgency        TaskUrgency `json:"urgency"`
+	StartsAt       time.Time   `json:"starts_at"`
+	EndsAt         time.Time   `json:"ends_at"`
+	DoneAt         *time.Time  `json:"done_at"`
+	CreatedAt      time.Time   `json:"created_at"`
+	UpdatedAt      time.Time   `json:"updated_at"`
+	Category       *string     `json:"category"`
+	Repeat         TaskRepeat  `json:"repeat"`
+	RepeatWeekdays []int16     `json:"repeat_weekdays"`
+	RepeatUntil    *time.Time  `json:"repeat_until"`
+}
+
+type TaskItem struct {
+	ID       int64      `json:"id"`
+	TaskID   int64      `json:"task_id"`
+	Title    string     `json:"title"`
+	Position int32      `json:"position"`
+	DoneAt   *time.Time `json:"done_at"`
+}
+
+type TaskItemCheck struct {
+	ItemID   int64     `json:"item_id"`
+	OccursOn time.Time `json:"occurs_on"`
+}
+
+type TaskOccurrence struct {
+	TaskID   int64     `json:"task_id"`
+	OccursOn time.Time `json:"occurs_on"`
+	DoneAt   time.Time `json:"done_at"`
 }

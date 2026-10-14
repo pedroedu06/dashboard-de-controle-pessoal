@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"dashboard/internal/db"
@@ -44,9 +45,9 @@ func Pool(t testing.TB) *pgxpool.Pool {
 	return pool
 }
 
-// Queries returns sqlc queries bound to a transaction that is rolled back
-// when the test ends, so tests never see each other's data.
-func Queries(t testing.TB) *sqlc.Queries {
+// Tx returns a transaction that is rolled back when the test ends, so tests
+// never see each other's data. Code under test may nest transactions in it.
+func Tx(t testing.TB) pgx.Tx {
 	t.Helper()
 	ctx := context.Background()
 
@@ -56,6 +57,11 @@ func Queries(t testing.TB) *sqlc.Queries {
 	}
 	// Cleanups run LIFO, so this rollback happens before the pool closes.
 	t.Cleanup(func() { _ = tx.Rollback(ctx) })
+	return tx
+}
 
-	return sqlc.New(tx)
+// Queries returns sqlc queries bound to a Tx.
+func Queries(t testing.TB) *sqlc.Queries {
+	t.Helper()
+	return sqlc.New(Tx(t))
 }

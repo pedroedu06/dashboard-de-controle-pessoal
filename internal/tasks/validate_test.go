@@ -2,6 +2,7 @@ package tasks
 
 import (
 	"errors"
+	"slices"
 	"testing"
 	"time"
 )
@@ -69,5 +70,98 @@ func TestNormalize_Errors(t *testing.T) {
 				t.Errorf("err = %v, want %v", err, tt.want)
 			}
 		})
+	}
+}
+
+func TestNormalize_TrimsCategoryAndItems(t *testing.T) {
+	in := validInput()
+	in.Category = "  Faculdade "
+	in.Items = []ItemInput{{Title: " arroz "}, {ID: 7, Title: "feijão"}}
+
+	got, err := in.Normalize()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Category != "Faculdade" || got.Items[0].Title != "arroz" || got.Items[1].ID != 7 {
+		t.Errorf("got = %+v", got)
+	}
+}
+
+func TestNormalize_DefaultsToNoRepeat(t *testing.T) {
+	got, err := validInput().Normalize()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got.Repeat.Kind != RepeatNone || got.Repeat.Recurring() {
+		t.Errorf("Repeat = %+v, want none", got.Repeat)
+	}
+}
+
+func TestNormalize_WeeklySortsAndDedupesWeekdays(t *testing.T) {
+	in := validInput()
+	in.Repeat = Repeat{Kind: RepeatWeekly, Weekdays: []time.Weekday{time.Friday, time.Monday, time.Friday}}
+
+	got, err := in.Normalize()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if want := []time.Weekday{time.Monday, time.Friday}; !slices.Equal(got.Repeat.Weekdays, want) {
+		t.Errorf("Weekdays = %v, want %v", got.Repeat.Weekdays, want)
+	}
+}
+
+func TestNormalize_DailyDropsWeekdays(t *testing.T) {
+	in := validInput()
+	in.Repeat = Repeat{Kind: RepeatDaily, Weekdays: []time.Weekday{time.Monday}}
+
+	got, err := in.Normalize()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(got.Repeat.Weekdays) != 0 {
+		t.Errorf("Weekdays = %v, want none", got.Repeat.Weekdays)
+	}
+}
+
+func TestNormalize_RepeatErrors(t *testing.T) {
+	dayBefore := validInput().StartsAt.AddDate(0, 0, -1)
+	tests := []struct {
+		name   string
+		modify func(*Input)
+		want   error
+	}{
+		{"unknown kind", func(in *Input) { in.Repeat.Kind = "monthly" }, ErrInvalidRepeat},
+		{"weekly without days", func(in *Input) { in.Repeat = Repeat{Kind: RepeatWeekly} }, ErrWeekdaysRequired},
+		{"invalid weekday", func(in *Input) { in.Repeat = Repeat{Kind: RepeatWeekly, Weekdays: []time.Weekday{9}} }, ErrInvalidWeekday},
+		{"spans midnight", func(in *Input) {
+			in.Repeat = Repeat{Kind: RepeatDaily}
+			in.EndsAt = in.StartsAt.Add(12 * time.Hour)
+		}, ErrRecurringSpansDays},
+		{"until before start", func(in *Input) { in.Repeat = Repeat{Kind: RepeatDaily, Until: &dayBefore} }, ErrUntilBeforeStart},
+		{"blank item", func(in *Input) { in.Items = []ItemInput{{Title: "  "}} }, ErrItemTitleRequired},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			in := validInput()
+			tt.modify(&in)
+
+			if _, err := in.Normalize(); !errors.Is(err, tt.want) {
+				t.Errorf("err = %v, want %v", err, tt.want)
+			}
+		})
+	}
+}
+
+func TestNormalize_UntilOnStartDayIsAllowed(t *testing.T) {
+	in := validInput()
+	until := in.StartsAt
+	in.Repeat = Repeat{Kind: RepeatDaily, Until: &until}
+
+	got, err := in.Normalize()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !got.Repeat.Until.Equal(StartOfDay(in.StartsAt)) {
+		t.Errorf("Until = %v, want the start day at midnight", got.Repeat.Until)
 	}
 }
