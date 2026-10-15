@@ -49,7 +49,7 @@ func (q *Queries) CreateSubject(ctx context.Context, name string) (Subject, erro
 const createTopic = `-- name: CreateTopic :one
 INSERT INTO topics (subject_id, title)
 VALUES ($1, $2)
-RETURNING id, subject_id, title, status, created_at
+RETURNING id, subject_id, title, status, created_at, next_review_on, interval_days, ease_factor, repetitions
 `
 
 type CreateTopicParams struct {
@@ -66,6 +66,10 @@ func (q *Queries) CreateTopic(ctx context.Context, arg CreateTopicParams) (Topic
 		&i.Title,
 		&i.Status,
 		&i.CreatedAt,
+		&i.NextReviewOn,
+		&i.IntervalDays,
+		&i.EaseFactor,
+		&i.Repetitions,
 	)
 	return i, err
 }
@@ -77,6 +81,19 @@ WHERE id = $1
 
 func (q *Queries) DeleteGoal(ctx context.Context, id int64) (int64, error) {
 	result, err := q.db.Exec(ctx, deleteGoal, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const deleteQuestionLog = `-- name: DeleteQuestionLog :execrows
+DELETE FROM question_logs
+WHERE id = $1
+`
+
+func (q *Queries) DeleteQuestionLog(ctx context.Context, id int64) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteQuestionLog, id)
 	if err != nil {
 		return 0, err
 	}
@@ -164,7 +181,7 @@ func (q *Queries) GetSubject(ctx context.Context, id int64) (Subject, error) {
 }
 
 const getTopic = `-- name: GetTopic :one
-SELECT id, subject_id, title, status, created_at FROM topics
+SELECT id, subject_id, title, status, created_at, next_review_on, interval_days, ease_factor, repetitions FROM topics
 WHERE id = $1
 `
 
@@ -177,8 +194,117 @@ func (q *Queries) GetTopic(ctx context.Context, id int64) (Topic, error) {
 		&i.Title,
 		&i.Status,
 		&i.CreatedAt,
+		&i.NextReviewOn,
+		&i.IntervalDays,
+		&i.EaseFactor,
+		&i.Repetitions,
 	)
 	return i, err
+}
+
+const insertQuestionLog = `-- name: InsertQuestionLog :one
+INSERT INTO question_logs (subject_id, topic_id, done_on, total, correct, source)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id
+`
+
+type InsertQuestionLogParams struct {
+	SubjectID int64     `json:"subject_id"`
+	TopicID   *int64    `json:"topic_id"`
+	DoneOn    time.Time `json:"done_on"`
+	Total     int32     `json:"total"`
+	Correct   int32     `json:"correct"`
+	Source    *string   `json:"source"`
+}
+
+func (q *Queries) InsertQuestionLog(ctx context.Context, arg InsertQuestionLogParams) (int64, error) {
+	row := q.db.QueryRow(ctx, insertQuestionLog,
+		arg.SubjectID,
+		arg.TopicID,
+		arg.DoneOn,
+		arg.Total,
+		arg.Correct,
+		arg.Source,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertTopicReview = `-- name: InsertTopicReview :exec
+INSERT INTO topic_reviews (topic_id, reviewed_at, grade, interval_days)
+VALUES ($1, $2, $3, $4)
+`
+
+type InsertTopicReviewParams struct {
+	TopicID      int64     `json:"topic_id"`
+	ReviewedAt   time.Time `json:"reviewed_at"`
+	Grade        int16     `json:"grade"`
+	IntervalDays int32     `json:"interval_days"`
+}
+
+func (q *Queries) InsertTopicReview(ctx context.Context, arg InsertTopicReviewParams) error {
+	_, err := q.db.Exec(ctx, insertTopicReview,
+		arg.TopicID,
+		arg.ReviewedAt,
+		arg.Grade,
+		arg.IntervalDays,
+	)
+	return err
+}
+
+const listDueTopics = `-- name: ListDueTopics :many
+SELECT t.id, t.subject_id, t.title, t.status, t.created_at, t.next_review_on, t.interval_days, t.ease_factor, t.repetitions, sub.name AS subject_name
+FROM topics t
+JOIN subjects sub ON sub.id = t.subject_id
+WHERE sub.archived_at IS NULL
+  AND t.next_review_on <= $1::date
+ORDER BY t.next_review_on, t.id
+`
+
+type ListDueTopicsRow struct {
+	ID           int64       `json:"id"`
+	SubjectID    int64       `json:"subject_id"`
+	Title        string      `json:"title"`
+	Status       TopicStatus `json:"status"`
+	CreatedAt    time.Time   `json:"created_at"`
+	NextReviewOn *time.Time  `json:"next_review_on"`
+	IntervalDays int32       `json:"interval_days"`
+	EaseFactor   float64     `json:"ease_factor"`
+	Repetitions  int32       `json:"repetitions"`
+	SubjectName  string      `json:"subject_name"`
+}
+
+// Reviews due on or before @today, for active subjects, most overdue first.
+func (q *Queries) ListDueTopics(ctx context.Context, today time.Time) ([]ListDueTopicsRow, error) {
+	rows, err := q.db.Query(ctx, listDueTopics, today)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListDueTopicsRow{}
+	for rows.Next() {
+		var i ListDueTopicsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SubjectID,
+			&i.Title,
+			&i.Status,
+			&i.CreatedAt,
+			&i.NextReviewOn,
+			&i.IntervalDays,
+			&i.EaseFactor,
+			&i.Repetitions,
+			&i.SubjectName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const listGoals = `-- name: ListGoals :many
@@ -213,6 +339,61 @@ func (q *Queries) ListGoals(ctx context.Context) ([]ListGoalsRow, error) {
 			&i.TargetMinutes,
 			&i.CreatedAt,
 			&i.SubjectName,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listQuestionLogs = `-- name: ListQuestionLogs :many
+SELECT q.id, q.subject_id, q.topic_id, q.done_on, q.total, q.correct, q.source, q.created_at, sub.name AS subject_name, t.title AS topic_title
+FROM question_logs q
+JOIN subjects sub ON sub.id = q.subject_id
+LEFT JOIN topics t ON t.id = q.topic_id
+WHERE sub.archived_at IS NULL
+  AND ($1::date IS NULL OR q.done_on >= $1::date)
+ORDER BY q.done_on DESC, q.id DESC
+`
+
+type ListQuestionLogsRow struct {
+	ID          int64     `json:"id"`
+	SubjectID   int64     `json:"subject_id"`
+	TopicID     *int64    `json:"topic_id"`
+	DoneOn      time.Time `json:"done_on"`
+	Total       int32     `json:"total"`
+	Correct     int32     `json:"correct"`
+	Source      *string   `json:"source"`
+	CreatedAt   time.Time `json:"created_at"`
+	SubjectName string    `json:"subject_name"`
+	TopicTitle  *string   `json:"topic_title"`
+}
+
+// Logs of active subjects done on or after @since (all when NULL).
+func (q *Queries) ListQuestionLogs(ctx context.Context, since *time.Time) ([]ListQuestionLogsRow, error) {
+	rows, err := q.db.Query(ctx, listQuestionLogs, since)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListQuestionLogsRow{}
+	for rows.Next() {
+		var i ListQuestionLogsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.SubjectID,
+			&i.TopicID,
+			&i.DoneOn,
+			&i.Total,
+			&i.Correct,
+			&i.Source,
+			&i.CreatedAt,
+			&i.SubjectName,
+			&i.TopicTitle,
 		); err != nil {
 			return nil, err
 		}
@@ -314,7 +495,7 @@ func (q *Queries) ListSubjects(ctx context.Context, includeArchived bool) ([]Sub
 }
 
 const listTopicsBySubjects = `-- name: ListTopicsBySubjects :many
-SELECT id, subject_id, title, status, created_at FROM topics
+SELECT id, subject_id, title, status, created_at, next_review_on, interval_days, ease_factor, repetitions FROM topics
 WHERE subject_id = ANY($1::bigint[])
 ORDER BY subject_id, id
 `
@@ -334,6 +515,10 @@ func (q *Queries) ListTopicsBySubjects(ctx context.Context, subjectIds []int64) 
 			&i.Title,
 			&i.Status,
 			&i.CreatedAt,
+			&i.NextReviewOn,
+			&i.IntervalDays,
+			&i.EaseFactor,
+			&i.Repetitions,
 		); err != nil {
 			return nil, err
 		}
@@ -400,6 +585,34 @@ func (q *Queries) SetSubjectArchived(ctx context.Context, arg SetSubjectArchived
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setTopicSchedule = `-- name: SetTopicSchedule :exec
+UPDATE topics
+SET next_review_on = $1,
+    interval_days = $2,
+    ease_factor = $3,
+    repetitions = $4
+WHERE id = $5
+`
+
+type SetTopicScheduleParams struct {
+	NextReviewOn *time.Time `json:"next_review_on"`
+	IntervalDays int32      `json:"interval_days"`
+	EaseFactor   float64    `json:"ease_factor"`
+	Repetitions  int32      `json:"repetitions"`
+	ID           int64      `json:"id"`
+}
+
+func (q *Queries) SetTopicSchedule(ctx context.Context, arg SetTopicScheduleParams) error {
+	_, err := q.db.Exec(ctx, setTopicSchedule,
+		arg.NextReviewOn,
+		arg.IntervalDays,
+		arg.EaseFactor,
+		arg.Repetitions,
+		arg.ID,
+	)
+	return err
 }
 
 const setTopicStatus = `-- name: SetTopicStatus :execrows

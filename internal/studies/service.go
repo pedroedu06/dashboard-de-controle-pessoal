@@ -172,12 +172,30 @@ func (s *Service) RenameTopic(ctx context.Context, id int64, title string) error
 	return affected(n, err, ErrTopicNotFound)
 }
 
-func (s *Service) SetTopicStatus(ctx context.Context, id int64, status Status) error {
+// SetTopicStatus changes a topic's status. Becoming "reviewed" puts it in the
+// review queue (next review tomorrow); leaving "reviewed" takes it out.
+func (s *Service) SetTopicStatus(ctx context.Context, now time.Time, id int64, status Status) error {
 	if !status.Valid() {
 		return ErrInvalidStatus
 	}
-	n, err := sqlc.New(s.db).SetTopicStatus(ctx, sqlc.SetTopicStatusParams{ID: id, Status: sqlc.TopicStatus(status)})
-	return affected(n, err, ErrTopicNotFound)
+	return s.inTx(ctx, func(q *sqlc.Queries) error {
+		topic, err := q.GetTopic(ctx, id)
+		if err != nil {
+			return notFound(err, ErrTopicNotFound)
+		}
+		if _, err := q.SetTopicStatus(ctx, sqlc.SetTopicStatusParams{ID: id, Status: sqlc.TopicStatus(status)}); err != nil {
+			return err
+		}
+
+		wasReviewed := Status(topic.Status) == StatusReviewed
+		switch {
+		case status == StatusReviewed && !wasReviewed:
+			return saveSchedule(ctx, q, id, StartSchedule(now))
+		case status != StatusReviewed && wasReviewed:
+			return saveSchedule(ctx, q, id, NewSchedule())
+		}
+		return nil
+	})
 }
 
 // DeleteTopic removes a topic; its sessions are kept without a topic.
@@ -290,6 +308,122 @@ func (s *Service) DeleteGoal(ctx context.Context, id int64) error {
 	return affected(n, err, ErrGoalNotFound)
 }
 
+// Reviews
+
+// DueReview is a topic whose review is due today or earlier.
+type DueReview struct {
+	Topic
+	SubjectName string
+	DaysOverdue int
+}
+
+// DueReviews lists the reviews due today, most overdue first.
+func (s *Service) DueReviews(ctx context.Context, now time.Time) ([]DueReview, error) {
+	rows, err := sqlc.New(s.db).ListDueTopics(ctx, startOfDay(now))
+	if err != nil {
+		return nil, err
+	}
+	out := make([]DueReview, len(rows))
+	for i, r := range rows {
+		topic := fromTopic(sqlc.Topic{
+			ID: r.ID, SubjectID: r.SubjectID, Title: r.Title, Status: r.Status, NextReviewOn: r.NextReviewOn,
+			IntervalDays: r.IntervalDays, EaseFactor: r.EaseFactor, Repetitions: r.Repetitions,
+		})
+		out[i] = DueReview{Topic: topic, SubjectName: r.SubjectName, DaysOverdue: topic.Schedule.DaysOverdue(now)}
+	}
+	return out, nil
+}
+
+// Review records how a review went and schedules the next one (SM-2).
+func (s *Service) Review(ctx context.Context, now time.Time, topicID int64, grade Grade) (Schedule, error) {
+	if !grade.Valid() {
+		return Schedule{}, ErrInvalidGrade
+	}
+	var next Schedule
+	err := s.inTx(ctx, func(q *sqlc.Queries) error {
+		row, err := q.GetTopic(ctx, topicID)
+		if err != nil {
+			return notFound(err, ErrTopicNotFound)
+		}
+		topic := fromTopic(row)
+		if topic.Schedule.NextReviewOn == nil {
+			return ErrNotScheduled
+		}
+		next = topic.Schedule.Review(grade.Quality(), now)
+		if err := saveSchedule(ctx, q, topicID, next); err != nil {
+			return err
+		}
+		return q.InsertTopicReview(ctx, sqlc.InsertTopicReviewParams{
+			TopicID: topicID, ReviewedAt: now, Grade: int16(grade.Quality()), IntervalDays: int32(next.IntervalDays),
+		})
+	})
+	return next, err
+}
+
+// Questions
+
+// LogQuestions records practice questions for an active subject and,
+// optionally, one of its topics.
+func (s *Service) LogQuestions(ctx context.Context, now time.Time, log QuestionLog) (int64, error) {
+	log, err := log.Validate(now)
+	if err != nil {
+		return 0, err
+	}
+	q := sqlc.New(s.db)
+	if _, err := activeSubject(ctx, q, log.SubjectID); err != nil {
+		return 0, err
+	}
+	if log.TopicID != nil {
+		topic, err := q.GetTopic(ctx, *log.TopicID)
+		if err != nil {
+			return 0, notFound(err, ErrTopicNotFound)
+		}
+		if topic.SubjectID != log.SubjectID {
+			return 0, ErrTopicOtherSubject
+		}
+	}
+	var source *string
+	if log.Source != "" {
+		source = &log.Source
+	}
+	return q.InsertQuestionLog(ctx, sqlc.InsertQuestionLogParams{
+		SubjectID: log.SubjectID, TopicID: log.TopicID, DoneOn: log.DoneOn,
+		Total: int32(log.Total), Correct: int32(log.Correct), Source: source,
+	})
+}
+
+func (s *Service) DeleteQuestionLog(ctx context.Context, id int64) error {
+	n, err := sqlc.New(s.db).DeleteQuestionLog(ctx, id)
+	return affected(n, err, ErrQuestionLogNotFound)
+}
+
+type QuestionReport struct {
+	Logs []QuestionLog // newest first
+	QuestionStats
+}
+
+// QuestionReport covers the last periodDays days (today included), or
+// everything when periodDays is 0. Archived subjects are left out.
+func (s *Service) QuestionReport(ctx context.Context, now time.Time, periodDays int) (QuestionReport, error) {
+	var since *time.Time
+	if periodDays > 0 {
+		day := startOfDay(now).AddDate(0, 0, -(periodDays - 1))
+		since = &day
+	}
+	rows, err := sqlc.New(s.db).ListQuestionLogs(ctx, since)
+	if err != nil {
+		return QuestionReport{}, err
+	}
+	logs := make([]QuestionLog, len(rows))
+	for i, r := range rows {
+		logs[i] = QuestionLog{
+			ID: r.ID, SubjectID: r.SubjectID, SubjectName: r.SubjectName, TopicID: r.TopicID, TopicTitle: deref(r.TopicTitle),
+			DoneOn: r.DoneOn, Total: int(r.Total), Correct: int(r.Correct), Source: deref(r.Source),
+		}
+	}
+	return QuestionReport{Logs: logs, QuestionStats: Stats(logs)}, nil
+}
+
 // HoursToMinutes converts a goal given in hours, rounding to whole minutes.
 func HoursToMinutes(hours float64) int {
 	return int(math.Round(hours * 60))
@@ -360,7 +494,20 @@ func activeSubject(ctx context.Context, q *sqlc.Queries, id int64) (sqlc.Subject
 }
 
 func fromTopic(t sqlc.Topic) Topic {
-	return Topic{ID: t.ID, SubjectID: t.SubjectID, Title: t.Title, Status: Status(t.Status)}
+	return Topic{
+		ID: t.ID, SubjectID: t.SubjectID, Title: t.Title, Status: Status(t.Status),
+		Schedule: Schedule{
+			NextReviewOn: t.NextReviewOn, IntervalDays: int(t.IntervalDays),
+			EaseFactor: t.EaseFactor, Repetitions: int(t.Repetitions),
+		},
+	}
+}
+
+func saveSchedule(ctx context.Context, q *sqlc.Queries, topicID int64, sch Schedule) error {
+	return q.SetTopicSchedule(ctx, sqlc.SetTopicScheduleParams{
+		ID: topicID, NextReviewOn: sch.NextReviewOn, IntervalDays: int32(sch.IntervalDays),
+		EaseFactor: sch.EaseFactor, Repetitions: int32(sch.Repetitions),
+	})
 }
 
 // affected maps "no rows changed" to notFoundErr.

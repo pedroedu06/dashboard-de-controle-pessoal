@@ -1,4 +1,5 @@
 import * as StudyAPI from '../../../wailsjs/go/main/StudyAPI';
+import {main} from '../../../wailsjs/go/models';
 
 export type TopicStatus = 'not_seen' | 'studying' | 'reviewed';
 
@@ -6,6 +7,7 @@ export interface Topic {
     id: number;
     title: string;
     status: TopicStatus;
+    nextReviewOn: string; // YYYY-MM-DD, empty when not in the review queue
 }
 
 export interface Subject {
@@ -48,6 +50,65 @@ export interface StopResult {
     minutes: number;
 }
 
+export type Grade = 'forgot' | 'hard' | 'ok' | 'easy';
+
+export interface DueReview {
+    topicId: number;
+    topicTitle: string;
+    subjectName: string;
+    dueOn: string; // YYYY-MM-DD
+    daysOverdue: number;
+    repetitions: number;
+    intervalDays: number;
+}
+
+export interface ReviewResult {
+    nextReviewOn: string;
+    intervalDays: number;
+}
+
+export interface QuestionLogInput {
+    subjectId: number;
+    topicId: number; // 0 = no topic
+    doneOn: string; // YYYY-MM-DD
+    total: number;
+    correct: number;
+    source: string;
+}
+
+export interface QuestionLog {
+    id: number;
+    subjectName: string;
+    topicTitle: string;
+    doneOn: string;
+    total: number;
+    correct: number;
+    source: string;
+}
+
+export interface RateRow {
+    id: number;
+    name: string;
+    subjectName: string;
+    total: number;
+    correct: number;
+    rate: number; // 0..1
+}
+
+export interface QuestionReport {
+    bySubject: RateRow[];
+    byTopic: RateRow[];
+    weaknesses: RateRow[];
+    logs: QuestionLog[];
+}
+
+export const gradeLabels: Record<Grade, string> = {
+    forgot: 'Esqueci',
+    hard: 'Difícil',
+    ok: 'OK',
+    easy: 'Fácil',
+};
+
 export const statusLabels: Record<TopicStatus, string> = {
     not_seen: 'Não visto',
     studying: 'Estudando',
@@ -70,6 +131,17 @@ export function formatMinutes(minutes: number): string {
     return m === 0 ? `${h}h` : `${h}h${pad(m)}`;
 }
 
+/** 0.756 → "76%" */
+export function formatPercent(rate: number): string {
+    return `${Math.round(rate * 100)}%`;
+}
+
+/** "2026-10-16" → "16/10" */
+export function formatDay(day: string): string {
+    const [, m, d] = day.split('-');
+    return `${d}/${m}`;
+}
+
 export const studiesApi = {
     overview: () => StudyAPI.Overview() as Promise<StudyOverview>,
     createSubject: (name: string) => StudyAPI.CreateSubject(name),
@@ -87,4 +159,9 @@ export const studiesApi = {
     createGoal: (subjectId: number, hours: number) => StudyAPI.CreateGoal(subjectId, hours),
     updateGoal: (id: number, hours: number) => StudyAPI.UpdateGoal(id, hours),
     deleteGoal: (id: number) => StudyAPI.DeleteGoal(id),
+    dueReviews: () => StudyAPI.DueReviews() as Promise<DueReview[]>,
+    reviewTopic: (topicId: number, grade: Grade) => StudyAPI.ReviewTopic(topicId, grade) as Promise<ReviewResult>,
+    logQuestions: (input: QuestionLogInput) => StudyAPI.LogQuestions(main.QuestionLogInputDTO.createFrom(input)),
+    deleteQuestionLog: (id: number) => StudyAPI.DeleteQuestionLog(id),
+    questionReport: (periodDays: number) => StudyAPI.QuestionReport(periodDays) as Promise<QuestionReport>,
 };

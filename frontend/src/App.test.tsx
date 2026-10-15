@@ -13,7 +13,7 @@ vi.mock('./features/tasks/api', async (importOriginal) => ({
 }));
 vi.mock('./features/studies/api', async (importOriginal) => ({
     ...(await importOriginal<typeof import('./features/studies/api')>()),
-    studiesApi: {overview: vi.fn()},
+    studiesApi: {overview: vi.fn(), dueReviews: vi.fn()},
 }));
 
 describe('App', () => {
@@ -22,6 +22,7 @@ describe('App', () => {
         vi.mocked(tasksApi.agenda).mockResolvedValue({overdue: [], days: []});
         vi.mocked(tasksApi.categories).mockResolvedValue([]);
         vi.mocked(studiesApi.overview).mockResolvedValue({subjects: [], archived: [], active: null, goals: [], sessions: []});
+        vi.mocked(studiesApi.dueReviews).mockResolvedValue([]);
     });
 
     it('starts on Home', async () => {

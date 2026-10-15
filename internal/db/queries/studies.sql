@@ -104,3 +104,43 @@ WHERE id = @id;
 -- name: DeleteGoal :execrows
 DELETE FROM study_goals
 WHERE id = @id;
+
+-- name: SetTopicSchedule :exec
+UPDATE topics
+SET next_review_on = @next_review_on,
+    interval_days = @interval_days,
+    ease_factor = @ease_factor,
+    repetitions = @repetitions
+WHERE id = @id;
+
+-- Reviews due on or before @today, for active subjects, most overdue first.
+-- name: ListDueTopics :many
+SELECT t.*, sub.name AS subject_name
+FROM topics t
+JOIN subjects sub ON sub.id = t.subject_id
+WHERE sub.archived_at IS NULL
+  AND t.next_review_on <= @today::date
+ORDER BY t.next_review_on, t.id;
+
+-- name: InsertTopicReview :exec
+INSERT INTO topic_reviews (topic_id, reviewed_at, grade, interval_days)
+VALUES (@topic_id, @reviewed_at, @grade, @interval_days);
+
+-- name: InsertQuestionLog :one
+INSERT INTO question_logs (subject_id, topic_id, done_on, total, correct, source)
+VALUES (@subject_id, @topic_id, @done_on, @total, @correct, @source)
+RETURNING id;
+
+-- name: DeleteQuestionLog :execrows
+DELETE FROM question_logs
+WHERE id = @id;
+
+-- Logs of active subjects done on or after @since (all when NULL).
+-- name: ListQuestionLogs :many
+SELECT q.*, sub.name AS subject_name, t.title AS topic_title
+FROM question_logs q
+JOIN subjects sub ON sub.id = q.subject_id
+LEFT JOIN topics t ON t.id = q.topic_id
+WHERE sub.archived_at IS NULL
+  AND (sqlc.narg(since)::date IS NULL OR q.done_on >= sqlc.narg(since)::date)
+ORDER BY q.done_on DESC, q.id DESC;

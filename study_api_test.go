@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"dashboard/internal/studies"
 	"dashboard/internal/testutil"
@@ -64,5 +65,71 @@ func TestStudyAPI_Flow(t *testing.T) {
 	result, err := api.StopSession()
 	if err != nil || result.Saved {
 		t.Errorf("StopSession = %+v, %v, want discarded (under a minute)", result, err)
+	}
+}
+
+func TestParseQuestionLog(t *testing.T) {
+	log, err := parseQuestionLog(QuestionLogInputDTO{SubjectID: 1, TopicID: 0, DoneOn: "2026-10-10", Total: 10, Correct: 7, Source: "FGV"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if log.TopicID != nil || log.DoneOn.Format("2006-01-02") != "2026-10-10" || log.Total != 10 || log.Source != "FGV" {
+		t.Errorf("log = %+v", log)
+	}
+	if log, _ := parseQuestionLog(QuestionLogInputDTO{SubjectID: 1, Total: 1}); !log.DoneOn.IsZero() {
+		t.Errorf("empty date should stay zero (today is applied by the service), got %v", log.DoneOn)
+	}
+	if _, err := parseQuestionLog(QuestionLogInputDTO{DoneOn: "10/10/2026"}); err == nil {
+		t.Error("expected an error for a non YYYY-MM-DD day")
+	}
+}
+
+func TestDayString(t *testing.T) {
+	if dayString(nil) != "" {
+		t.Error("nil day should be empty")
+	}
+	day := time.Date(2026, 10, 16, 0, 0, 0, 0, time.UTC)
+	if dayString(&day) != "2026-10-16" {
+		t.Errorf("dayString = %q", dayString(&day))
+	}
+}
+
+func TestStudyAPI_ReviewAndQuestions(t *testing.T) {
+	app := &App{ctx: context.Background(), studies: studies.NewService(testutil.Tx(t))}
+	api := &StudyAPI{app: app}
+
+	sub, err := api.CreateSubject("Português")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := api.CreateTopic(sub.ID, "Crase"); err != nil {
+		t.Fatal(err)
+	}
+	ov, _ := api.Overview()
+	topicID := ov.Subjects[0].Topics[0].ID
+
+	if err := api.SetTopicStatus(topicID, "reviewed"); err != nil {
+		t.Fatal(err)
+	}
+	ov, _ = api.Overview()
+	if ov.Subjects[0].Topics[0].NextReviewOn == "" {
+		t.Error("reviewed topic should have a next review day")
+	}
+	if due, _ := api.DueReviews(); len(due) != 0 {
+		t.Errorf("due = %+v, want none until tomorrow", due)
+	}
+	if _, err := api.ReviewTopic(topicID, "great"); !errors.Is(err, studies.ErrInvalidGrade) {
+		t.Errorf("invalid grade: err = %v", err)
+	}
+
+	if err := api.LogQuestions(QuestionLogInputDTO{SubjectID: sub.ID, TopicID: topicID, Total: 12, Correct: 3}); err != nil {
+		t.Fatal(err)
+	}
+	report, err := api.QuestionReport(30)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(report.Weaknesses) != 1 || report.Weaknesses[0].Rate != 0.25 || len(report.Logs) != 1 {
+		t.Errorf("report = %+v", report)
 	}
 }

@@ -140,6 +140,17 @@ func (ns NullTopicStatus) Value() (driver.Value, error) {
 	return string(ns.TopicStatus), nil
 }
 
+type QuestionLog struct {
+	ID        int64     `json:"id"`
+	SubjectID int64     `json:"subject_id"`
+	TopicID   *int64    `json:"topic_id"`
+	DoneOn    time.Time `json:"done_on"`
+	Total     int32     `json:"total"`
+	Correct   int32     `json:"correct"`
+	Source    *string   `json:"source"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
 type Setting struct {
 	Key       string          `json:"key"`
 	Value     json.RawMessage `json:"value"`
@@ -205,9 +216,21 @@ type TaskOccurrence struct {
 }
 
 type Topic struct {
-	ID        int64       `json:"id"`
-	SubjectID int64       `json:"subject_id"`
-	Title     string      `json:"title"`
-	Status    TopicStatus `json:"status"`
-	CreatedAt time.Time   `json:"created_at"`
+	ID           int64       `json:"id"`
+	SubjectID    int64       `json:"subject_id"`
+	Title        string      `json:"title"`
+	Status       TopicStatus `json:"status"`
+	CreatedAt    time.Time   `json:"created_at"`
+	NextReviewOn *time.Time  `json:"next_review_on"`
+	IntervalDays int32       `json:"interval_days"`
+	EaseFactor   float64     `json:"ease_factor"`
+	Repetitions  int32       `json:"repetitions"`
+}
+
+type TopicReview struct {
+	ID           int64     `json:"id"`
+	TopicID      int64     `json:"topic_id"`
+	ReviewedAt   time.Time `json:"reviewed_at"`
+	Grade        int16     `json:"grade"`
+	IntervalDays int32     `json:"interval_days"`
 }

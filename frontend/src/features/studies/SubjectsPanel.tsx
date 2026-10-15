@@ -1,5 +1,5 @@
 import {FormEvent, useState} from 'react';
-import {statusLabels, Subject, Topic, TopicStatus} from './api';
+import {formatDay, statusLabels, Subject, Topic, TopicStatus} from './api';
 
 export interface SubjectActions {
     onCreateSubject: (name: string) => void;
@@ -64,6 +64,7 @@ function SubjectCard({subject, ...actions}: {subject: Subject} & SubjectActions)
                         >
                             {Object.entries(statusLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                         </select>{' '}
+                        {topic.nextReviewOn && <>próxima revisão {formatDay(topic.nextReviewOn)}{' '}</>}
                         <button type="button" onClick={() => actions.onRenameTopic(topic)}>Renomear</button>{' '}
                         <button type="button" onClick={() => actions.onDeleteTopic(topic)}>Excluir</button>
                     </li>

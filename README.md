@@ -6,7 +6,7 @@ App desktop pessoal para gerenciar a vida: tarefas, finanças, estudos e aliment
 
 O React chama funções Go (bindings do Wails), e o Go conversa com o banco. O app só funciona online.
 
-**Funcionalidades:** [Tarefas](docs/produto/tarefas.md) (to-do com agenda, categorias, filtros, lista de itens e tarefas recorrentes) e [Estudos](docs/produto/estudos.md) (matérias, tópicos, timer, progresso e metas semanais). As regras de produto de cada módulo ficam em `docs/produto/`.
+**Funcionalidades:** [Tarefas](docs/produto/tarefas.md) (to-do com agenda, categorias, filtros, lista de itens e tarefas recorrentes) e [Estudos](docs/produto/estudos.md) (matérias, tópicos, timer, progresso, metas semanais, revisão espaçada e registro de questões). As regras de produto de cada módulo ficam em `docs/produto/`.
 
 ---
 
@@ -124,7 +124,7 @@ study_api.go             funções de estudos expostas ao frontend
 internal/
   config/                carrega DATABASE_URL (ambiente / .env)
   tasks/                 regras de produto das tarefas (validação, agenda) e persistência
-  studies/               regras de produto dos estudos (timer, progresso, metas) e persistência
+  studies/               regras de produto dos estudos (timer, progresso, metas, SM-2, questões) e persistência
   db/                    conexão (pgxpool) e migrations (goose, embutidas no binário)
     migrations/          arquivos .sql versionados
     queries/             queries SQL lidas pelo sqlc
@@ -134,7 +134,7 @@ frontend/
   src/
     pages/               telas simples (Home)
     features/tasks/      tela de tarefas: agenda, modal e chamadas ao Go
-    features/studies/    tela de estudos: timer, metas, matérias e sessões
+    features/studies/    tela de estudos: visão geral, revisões de hoje e questões
   wailsjs/               bindings gerados pelo Wails (go/ fica fora do Git)
 sqlc.yaml                configuração do sqlc
 Taskfile.yml             comandos do projeto

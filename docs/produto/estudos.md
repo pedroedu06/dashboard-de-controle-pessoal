@@ -58,7 +58,55 @@ A barra de progresso da matéria vai de 0% a 100%:
 
 Lista das sessões da semana atual (dia, matéria, tópico e duração), da mais recente para a mais antiga. Dá para **excluir** uma sessão errada (ex.: esqueceu o timer ligado), e ela deixa de contar nas metas.
 
+## Telas
+
+Estudos tem três subabas: **Visão geral** (matérias, timer, metas e sessões), **Revisões de hoje (N)**, com a quantidade pendente, e **Questões**.
+
+## Revisão espaçada (SM-2)
+
+Cada tópico guarda o seu ciclo de revisão: a data da próxima revisão, o intervalo em dias, a "facilidade" (começa em 2,5) e quantas revisões seguidas deram certo.
+
+- **Marcar o tópico como "Revisado"** coloca ele na fila: a primeira revisão é **amanhã**.
+- **Voltar o tópico para "Estudando" ou "Não visto"** tira ele da fila e zera o ciclo. Marcar "Revisado" de novo recomeça do zero.
+- Em **Revisões de hoje** aparecem os tópicos com revisão para hoje ou atrasada (os mais atrasados primeiro), de matérias ativas. Para cada um, você diz como foi:
+
+  | Botão | Nota SM-2 | Efeito |
+  |---|---|---|
+  | Esqueci | 1 | Volta para o começo: revisa **amanhã** de novo, e a facilidade cai |
+  | Difícil | 3 | Avança, mas a facilidade cai (os próximos intervalos crescem menos) |
+  | OK | 4 | Avança normalmente |
+  | Fácil | 5 | Avança, e a facilidade sobe (os próximos intervalos crescem mais) |
+
+- **Intervalos** (SM-2 clássico), contando a partir do dia da revisão:
+  - Depois de marcar "Revisado": 1 dia.
+  - Na revisão seguinte que der certo: 6 dias.
+  - A partir daí: intervalo anterior × facilidade. Respondendo sempre **OK**: 1 → 6 → 15 → 38 → 95 dias...
+- A facilidade nunca fica abaixo de 1,3.
+- O tópico continua "Revisado" mesmo quando você esquece; só a data da próxima revisão muda.
+- Na Visão geral, cada tópico revisado mostra a data da **próxima revisão**.
+
+## Registro de questões
+
+Em **Questões** você registra blocos de questões/simulados:
+
+| Campo | Regra |
+|---|---|
+| Data | Padrão hoje; não pode ser no futuro |
+| Matéria | Obrigatória (ativa) |
+| Tópico | Opcional, da mesma matéria |
+| Feitas | De 1 a 1000 |
+| Acertos | De 0 até o número de feitas |
+| Origem | Opcional (ex.: "Simulado FGV 03", "QConcursos") |
+
+O relatório usa o período escolhido (**últimos 30 dias**, **90 dias** ou **tudo**):
+
+- **Por matéria** e **por tópico**: feitas, acertos e % de acerto. Registros sem tópico contam só na matéria.
+- **Pontos fracos**: os **5 tópicos com menor % de acerto** entre os que têm **pelo menos 10 questões** no período. No empate, aparece primeiro o que tem mais questões.
+- **Registros**: a lista do período, com excluir.
+- Matérias arquivadas ficam fora do relatório.
+
 ## Em aberto
 
 - Lançar uma sessão manual (estudo feito sem o timer).
+- Caderno de erros (anotar cada questão errada e o porquê).
 - Histórico de semanas anteriores.
